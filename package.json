@@ -1,0 +1,85 @@
+{
+  "name": "job-finder-v2",
+  "version": "0.1.0",
+  "description": "Personal job-finding desktop app: experience-engine discovery, hostile-board extension, agent console, auto-tailored applications.",
+  "author": {
+    "name": "Cole"
+  },
+  "license": "MIT",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on tcp:5173 && tsc -p electron/tsconfig.json && electron .",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build": "npm run build:renderer && npm run build:electron",
+    "start": "npm run build && cross-env JF_PROD=1 electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc -p tsconfig.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "dist": "npm run build && electron-builder --win nsis portable --publish never",
+    "dist:portable": "npm run build && electron-builder --win portable --publish never",
+    "postinstall": "electron-builder install-app-deps || echo skipped"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "cheerio": "^1.0.0",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.5",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.cole.jobfinder",
+    "productName": "Job Finder",
+    "icon": "build/icon.ico",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "directories": {
+      "output": "dist-installer"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

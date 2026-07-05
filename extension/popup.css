@@ -1,0 +1,16 @@
+body { width: 300px; margin: 0; padding: 12px; font: 13px/1.4 -apple-system, Segoe UI, sans-serif;
+  background: #161922; color: #e6e8ee; }
+h1 { font-size: 15px; margin: 0 0 10px; }
+.sec { border-top: 1px solid #2a2f3d; padding: 10px 0; }
+.sec:first-of-type { border-top: none; padding-top: 0; }
+label { display: block; font-size: 11px; color: #8b93a7; margin: 6px 0 2px; }
+input[type=text], input[type=password], #hubUrl, #token {
+  width: 100%; box-sizing: border-box; background: #1d2230; color: #e6e8ee;
+  border: 1px solid #2a2f3d; border-radius: 6px; padding: 6px 8px; font: inherit; }
+.row { display: flex; gap: 8px; margin-top: 8px; }
+button { background: #1d2230; color: #e6e8ee; border: 1px solid #2a2f3d; border-radius: 6px;
+  padding: 6px 12px; cursor: pointer; font: inherit; }
+button.primary { background: #5b8cff; border-color: #5b8cff; color: #fff; width: 100%; }
+.status { font-size: 11px; color: #8b93a7; margin-top: 8px; min-height: 14px; }
+.toggles .chk { display: flex; align-items: center; gap: 6px; color: #e6e8ee; font-size: 12px; margin: 6px 0; }
+.toggles .chk input { margin: 0; }
