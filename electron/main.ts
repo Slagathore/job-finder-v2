@@ -33,7 +33,10 @@ import { getDb, closeDb } from './ipc/db';
 import { killAllChildren } from './selfext/exec';
 import { randomUUID } from 'crypto';
 import { runScan } from './scan/runner';
-import { runEmbeddings } from './discovery/service';
+import { runEmbeddings, discover } from './discovery/service';
+import { discoverBoardsFromJobs } from './boards/autodiscover';
+import { collapseAggregatorDupes } from './maintenance/dedupe';
+import { runBackup } from './maintenance/backup';
 import type { Server } from 'http';
 
 // Dev = unpackaged AND not forced to prod. JF_PROD lets `npm start` / a smoke
@@ -64,6 +67,7 @@ function shutdown(): void {
   shuttingDown = true;
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   if (embedTimer) { clearTimeout(embedTimer); embedTimer = null; }
+  if (atsTimer) { clearTimeout(atsTimer); atsTimer = null; }
   try { hubServer?.close(); } catch { /* */ }
   killAllChildren();
   closeDb();
@@ -106,6 +110,8 @@ function buildTray() {
   tray.setToolTip('Job Finder');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show Job Finder', click: () => showWindow() },
+    { label: 'Scan now', click: () => scheduledTick('manual').catch(err => console.error('[tray] scan failed:', err?.message ?? err)) },
+    { label: 'Open Search', click: () => { showWindow(); send('open-tab', 'search'); } },
     { type: 'separator' },
     { label: 'Quit', click: () => { quitting = true; app.quit(); } },
     { label: 'Force Quit (kill background)', click: () => forceQuit() },
@@ -114,29 +120,53 @@ function buildTray() {
   tray.on('double-click', () => showWindow());
 }
 
+/** Desktop notification that focuses the app (optionally on a tab) on click. */
+function notify(body: string, tab?: string) {
+  try {
+    const n = new Notification({ title: 'Job Finder', body });
+    n.on('click', () => { showWindow(); if (tab) send('open-tab', tab); });
+    n.show();
+  } catch { /* headless / notifications disabled */ }
+}
+
 /**
- * Background scheduler (PLAN.md §6.19): on the configured cadence, runs an ATS
- * scan and (when Gmail is connected) a mail ingest, surfacing notifications.
- * Re-armed whenever the interval setting changes.
+ * The full "works while you sleep" chain (PLAN.md §6.19, upgraded): scan the
+ * ATS boards, collapse aggregator dupes into the fresh ATS rows, embed anything
+ * new, surface the best fits, and tell Cole what's actually worth looking at —
+ * not just how many rows landed.
+ */
+async function scheduledTick(trigger: 'manual' | 'scheduled'): Promise<void> {
+  const s = await runScan(trigger);
+  console.log(`[scheduler] scan: +${s.added} jobs (${s.found} found, ${s.scanned} boards)`);
+  try { collapseAggregatorDupes(); } catch (e: any) { console.error('[dedupe]', e?.message ?? e); }
+  if (s.added > 0) {
+    let topLine = '';
+    try {
+      await runEmbeddings(false);
+      const d = await discover(20);
+      const top = (d.results ?? [])[0];
+      if (top?.sim) topLine = ` · top fit ${Math.round(top.sim * 100)}%: ${top.title} @ ${top.company}`;
+    } catch (e: any) { console.error('[scheduler] embed/discover skipped:', e?.message ?? e); }
+    try { addNotification('jobs', { added: s.added, found: s.found, scanned: s.scanned, topLine }); } catch { /* */ }
+    if (readSettings().notifyOnNewJobs) {
+      notify(`${s.added} new job${s.added === 1 ? '' : 's'} from the latest scan${topLine}`, 'search');
+    }
+    send('scan:done', s);
+    send('notify');
+  }
+}
+
+/**
+ * Background scheduler (PLAN.md §6.19): on the configured cadence, runs the
+ * scan→dedupe→embed→discover chain and (when Gmail is connected) a mail
+ * ingest, surfacing notifications. Re-armed whenever the interval changes.
  */
 function armScheduler() {
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   const minutes = Number(readSettings().scanIntervalMinutes) || 0;
   if (minutes <= 0) return;
   scanTimer = setInterval(() => {
-    runScan('scheduled')
-      .then(s => {
-        console.log(`[scheduler] scan: +${s.added} jobs (${s.found} found, ${s.scanned} boards)`);
-        if (s.added > 0) {
-          try { addNotification('jobs', { added: s.added, found: s.found, scanned: s.scanned }); } catch { /* */ }
-          if (readSettings().notifyOnNewJobs) {
-            try { new Notification({ title: 'Job Finder', body: `${s.added} new job${s.added === 1 ? '' : 's'} from the latest scan` }).show(); } catch { /* */ }
-          }
-          send('scan:done', s);
-          send('notify');
-        }
-      })
-      .catch(err => console.error('[scheduler] scan failed:', err?.message ?? err));
+    scheduledTick('scheduled').catch(err => console.error('[scheduler] scan failed:', err?.message ?? err));
     // Opportunistic retention prune (safe: untouched old discovered jobs only).
     try { runPrune(); } catch { /* */ }
     // Also ingest mail on the same cadence when Gmail is connected.
@@ -165,7 +195,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:5177'); // 5173 belongs to DungeonMaster on this machine.
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
@@ -211,8 +241,27 @@ function scraperStale(site: string, url: string) {
   if (Date.now() - last < 6 * 3600_000) return;
   staleAlerted.set(site, Date.now());
   try { addNotification('scraper-stale', { site, url }); } catch { /* */ }
-  try { new Notification({ title: 'Job Finder', body: `${site} scraper found 0 jobs on a results page — selectors may be stale.` }).show(); } catch { /* */ }
+  notify(`${site} scraper found 0 jobs on a results page — selectors may be stale.`);
   send('notify');
+}
+
+// Indeed→ATS bridge: after harvests settle, probe the new companies for public
+// Greenhouse/Lever/Ashby boards and add hits as durable API feeds. Debounced
+// behind the embed timer window; a few companies per pass keeps it polite.
+let atsTimer: NodeJS.Timeout | null = null;
+function scheduleAtsDiscovery() {
+  if (atsTimer) clearTimeout(atsTimer);
+  atsTimer = setTimeout(() => {
+    atsTimer = null;
+    discoverBoardsFromJobs(5)
+      .then(found => {
+        if (!found.length) return;
+        try { addNotification('boards', { added: found.length, names: found.map(f => f.company) }); } catch { /* */ }
+        notify(`Found ${found.length} direct company board${found.length === 1 ? '' : 's'}: ${found.map(f => f.company).join(', ')} — future scans cover them automatically.`, 'boards');
+        send('notify');
+      })
+      .catch(err => console.error('[ats-discover] failed:', err?.message ?? err));
+  }, 30_000);
 }
 
 function startIngressServer() {
@@ -222,7 +271,7 @@ function startIngressServer() {
     token: readSettings().hubToken,
     ingestJobs: (jobs: any[]) => {
       const r = ingestJobs(jobs);
-      if (r.added > 0 || r.updated > 0) { send('notify'); scheduleAutoEmbed(); }
+      if (r.added > 0 || r.updated > 0) { send('notify'); scheduleAutoEmbed(); scheduleAtsDiscovery(); }
       return r;
     },
     ingestFields,
@@ -254,6 +303,12 @@ function registerAppHandlers() {
   });
   ipcMain.handle('app:setCloseToTray', (_e, v: boolean) => { closeToTray = !!v; return closeToTray; });
   ipcMain.handle('app:rearmScheduler', () => { armScheduler(); return true; });
+  // Invalidates the old extension pairing immediately; re-pair via the popup.
+  ipcMain.handle('app:rotateHubToken', () => {
+    const token = randomUUID();
+    writeSetting('hubToken', token);
+    return token;
+  });
   ipcMain.handle('app:pickPath', async (_e, opts: Electron.OpenDialogOptions = {}) => {
     const r = await dialog.showOpenDialog(mainWindow ?? undefined as any, opts);
     return r.canceled ? null : r.filePaths[0];
@@ -299,6 +354,13 @@ app.whenReady().then(async () => {
   registerWatchHandlers();
   registerAppHandlers();
   try { const p = runPrune(); if (p.jobsDeleted || p.notificationsDeleted) console.log(`[prune] boot: -${p.jobsDeleted} jobs, -${p.notificationsDeleted} notifs`); } catch { /* */ }
+  // Daily rotating DB backup — the whole job search lives in one SQLite file.
+  runBackup().then(b => {
+    if (b.ok && !b.skipped) console.log(`[backup] ${b.path}`);
+    else if (!b.ok) console.error('[backup] failed:', b.error);
+  }).catch(err => console.error('[backup] failed:', err?.message ?? err));
+  // Collapse any aggregator/ATS duplicate pairs that accumulated while off.
+  try { collapseAggregatorDupes(); } catch (e: any) { console.error('[dedupe] boot:', e?.message ?? e); }
   startIngressServer();
   createWindow();
   buildTray();

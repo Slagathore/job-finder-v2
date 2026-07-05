@@ -37,7 +37,7 @@ Self-extend · Settings.
 
 ```bash
 npm install
-npm run dev      # vite (5173) + electron
+npm run dev      # vite (5177) + electron
 npm test         # vitest (101 tests)
 npm run build    # renderer + electron
 npm run dist     # package a Windows installer (NSIS + portable) → dist-installer/

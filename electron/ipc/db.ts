@@ -283,6 +283,21 @@ export function initDb() {
       created_at      INTEGER NOT NULL
     );
 
+    -- ── ATS auto-discovery cache (Indeed→ATS bridge) ───────────────────
+    CREATE TABLE IF NOT EXISTS ats_probe_cache (
+      normalized_name TEXT PRIMARY KEY,
+      found           TEXT,              -- ats type ('' = probed, none found)
+      checked_at      INTEGER
+    );
+
+    -- ── BLS OEWS wage cache (salary grounding) ─────────────────────────
+    CREATE TABLE IF NOT EXISTS bls_wage_cache (
+      soc           TEXT PRIMARY KEY,    -- e.g. '15-1252'
+      annual_median INTEGER,             -- null = lookup failed / no data
+      year          TEXT,
+      cached_at     INTEGER
+    );
+
     -- ── Geocode cache (§6.3) ───────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS geo_cache (
       query     TEXT PRIMARY KEY,   -- normalized location string

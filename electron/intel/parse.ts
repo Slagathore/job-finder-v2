@@ -5,11 +5,17 @@ import { parseJsonLoose, recoverTruncatedArray } from '../lib/json';
 const conf = (x: any) => (['low', 'medium', 'high'].includes(x) ? x : 'low');
 const lvl = (x: any) => (['low', 'medium', 'high'].includes(x) ? x : 'medium');
 
-export interface SalaryParsed { min: number | null; max: number | null; currency: string; confidence: string; note: string; }
+export interface SalaryParsed { min: number | null; max: number | null; currency: string; confidence: string; note: string; soc: string | null; }
+/** Valid 6-digit SOC occupation code like '15-1252' (used for BLS grounding). */
+export function normalizeSoc(x: any): string | null {
+  if (typeof x !== 'string') return null;
+  const m = x.trim().match(/^(\d{2})-?(\d{4})$/);
+  return m ? `${m[1]}-${m[2]}` : null;
+}
 export function parseSalary(text: string): SalaryParsed {
   const p = parseJsonLoose<any>(text) ?? {};
   const num = (x: any) => (typeof x === 'number' ? x : null);
-  return { min: num(p.min), max: num(p.max), currency: typeof p.currency === 'string' ? p.currency : 'USD', confidence: conf(p.confidence), note: typeof p.note === 'string' ? p.note : '' };
+  return { min: num(p.min), max: num(p.max), currency: typeof p.currency === 'string' ? p.currency : 'USD', confidence: conf(p.confidence), note: typeof p.note === 'string' ? p.note : '', soc: normalizeSoc(p.soc) };
 }
 
 export interface CompanyIntel { company: string; rating: number | null; pros: string[]; cons: string[]; summary: string; confidence: string; source: string; }

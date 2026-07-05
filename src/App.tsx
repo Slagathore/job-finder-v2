@@ -34,6 +34,9 @@ export default function App() {
 
   useEffect(() => { window.api.app.version().then(setVersion); }, []);
 
+  // Tray items and desktop-notification clicks deep-link into a tab.
+  useEffect(() => window.api.app.onOpenTab(t => setTab(t as TabId)), []);
+
   useEffect(() => {
     function onRejection(e: PromiseRejectionEvent) {
       toast(String((e.reason && e.reason.message) ?? e.reason), 'error');

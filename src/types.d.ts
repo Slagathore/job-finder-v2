@@ -88,7 +88,14 @@ export interface Api {
     stats: () => Promise<{ jobs: number; applications: number; starred: number; notifications: number; prunable: number }>;
     prune: () => Promise<{ jobsDeleted: number; notificationsDeleted: number; skipped?: string }>;
   };
-  digest: { get: () => Promise<{ newToday: number; jobsTotal: number; surfaced: number; starred: number; followupsDue: number; unseenNotifs: number; interviewsOffers: number; byState: Record<string, number> }> };
+  digest: {
+    get: () => Promise<{ newToday: number; jobsTotal: number; surfaced: number; starred: number; followupsDue: number; unseenNotifs: number; interviewsOffers: number; byState: Record<string, number> }>;
+    today: () => Promise<{
+      followups: { appId: number; jobId: number; company: string; title: string; url?: string; state: string; daysSince: number; action: string }[];
+      freshFits: { id: number; company: string; title: string; url: string; fit_score: string | null; work_mode: string | null }[];
+      staleApps: { appId: number; jobId: number; company: string; title: string; url: string; daysSince: number }[];
+    }>;
+  };
   activity: { heatmap: (weeks?: number) => Promise<{ grid: { date: string; count: number }[]; streak: number; total: number }> };
   searches: {
     save: (name: string, params: any) => Promise<{ ok: boolean } | { error: string }>;
@@ -119,7 +126,7 @@ export interface Api {
     disconnect: () => Promise<{ ok: boolean }>;
   };
   intel: {
-    salary: (jobId: number) => Promise<{ min: number | null; max: number | null; currency: string; confidence: string; note: string; source: string } | { error: string }>;
+    salary: (jobId: number) => Promise<{ min: number | null; max: number | null; currency: string; confidence: string; note: string; source: string; soc?: string | null; blsMedian?: number; blsYear?: string } | { error: string }>;
     company: (company: string, force?: boolean) => Promise<any | { error: string }>;
     moves: () => Promise<{ moves: any[] } | { error: string }>;
     certs: (field: string, force?: boolean) => Promise<{ certs: any[] } | { error: string }>;
@@ -158,7 +165,9 @@ export interface Api {
     show: () => Promise<void>;
     setCloseToTray: (v: boolean) => Promise<boolean>;
     rearmScheduler: () => Promise<boolean>;
+    rotateHubToken: () => Promise<string>;
     pickPath: (opts?: any) => Promise<string | null>;
+    onOpenTab: (cb: (tab: string) => void) => () => void;
   };
 }
 

@@ -72,7 +72,10 @@ contextBridge.exposeInMainWorld('api', {
     stats: () => invoke('maintenance:stats'),
     prune: () => invoke('maintenance:prune'),
   },
-  digest: { get: () => invoke('digest:get') },
+  digest: {
+    get: () => invoke('digest:get'),
+    today: () => invoke('digest:today'),
+  },
   activity: { heatmap: (weeks?: number) => invoke('activity:heatmap', weeks) },
   searches: {
     save: (name: string, params: any) => invoke('searches:save', { name, params }),
@@ -145,6 +148,12 @@ contextBridge.exposeInMainWorld('api', {
     show: () => invoke('app:show'),
     setCloseToTray: (v: boolean) => invoke('app:setCloseToTray', v),
     rearmScheduler: () => invoke('app:rearmScheduler'),
+    rotateHubToken: () => invoke('app:rotateHubToken'),
     pickPath: (opts?: any) => invoke('app:pickPath', opts ?? {}),
+    onOpenTab: (cb: (tab: string) => void) => {
+      const l = (_e: any, tab: string) => cb(tab);
+      ipcRenderer.on('open-tab', l);
+      return () => ipcRenderer.removeListener('open-tab', l);
+    },
   },
 });

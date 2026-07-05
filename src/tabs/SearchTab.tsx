@@ -310,8 +310,12 @@ export function SearchTab() {
               <td className="muted small">{j.work_mode === 'remote' ? '—' : (j.distance != null ? `${Math.round(j.distance)}mi` : '?')}</td>
               <td>
                 {j.pay ? `$${(j.pay / 1000).toFixed(0)}k` : (j.salary_listed || '—')}
-                {sal[j.id] && !sal[j.id].busy && !sal[j.id].error &&
-                  <div className="muted small" title="LLM estimate — not verified against live salary data">est {fmtK(sal[j.id].min)}–{fmtK(sal[j.id].max)} ({sal[j.id].confidence}, LLM est.)</div>}
+                {sal[j.id] && !sal[j.id].busy && !sal[j.id].error && (
+                  <div className="muted small" title="Range is an LLM estimate; BLS figure is the real national median for this occupation (OEWS)">
+                    est {fmtK(sal[j.id].min)}–{fmtK(sal[j.id].max)} ({sal[j.id].confidence}, LLM est.)
+                    {sal[j.id].blsMedian && <> · BLS median {fmtK(sal[j.id].blsMedian)}{sal[j.id].blsYear ? ` ('${String(sal[j.id].blsYear).slice(2)})` : ''}</>}
+                  </div>
+                )}
               </td>
               <td className="rowacts">
                 <button className="link" onClick={() => grade(j.id)}>grade</button>

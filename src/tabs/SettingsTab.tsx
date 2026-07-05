@@ -66,6 +66,14 @@ export function SettingsTab() {
   }
   async function disconnectGmail() { await window.api.gmail.disconnect(); setGmail(await window.api.gmail.status()); setMailMsg(''); }
 
+  async function rotateToken() {
+    const ok = await confirmDialog({ title: 'Rotate pairing token', message: 'Generate a new hub token? The extension stops working until you paste the new token into its popup.', confirmLabel: 'Rotate', danger: true });
+    if (!ok) return;
+    const token = await window.api.app.rotateHubToken();
+    setHub(h => h ? { ...h, token } : h);
+    toast('Token rotated — update the extension popup.', 'success');
+  }
+
   async function addBlock() {
     if (!blockName.trim()) return;
     await window.api.blocklist.add(blockName.trim());
@@ -101,6 +109,10 @@ export function SettingsTab() {
             <input readOnly value={hub.url} onFocus={e => e.currentTarget.select()} /></div>
           <div className="field" style={{ marginTop: 8 }}><span className="field-l">Pairing token</span>
             <input readOnly value={hub.token} onFocus={e => e.currentTarget.select()} /></div>
+          <div className="row">
+            <button className="link" onClick={rotateToken}>rotate token</button>
+            <span className="muted small">Invalidates the old pairing immediately — paste the new token into the extension popup.</span>
+          </div>
         </div>
       )}
 

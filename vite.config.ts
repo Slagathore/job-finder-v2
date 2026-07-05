@@ -32,7 +32,8 @@ export default defineConfig({
   base: './',
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   build: { outDir: 'dist', emptyOutDir: true },
-  server: { port: 5173, strictPort: true },
+  // 5173 belongs to DungeonMaster on this machine.
+  server: { port: 5177, strictPort: true },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts']

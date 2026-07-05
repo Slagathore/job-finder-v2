@@ -4,9 +4,14 @@ import { parseSalary, parseCompanyIntel, parseMoves, parseCerts } from '../elect
 describe('parseSalary', () => {
   it('parses numbers + clamps confidence', () => {
     expect(parseSalary('{"min":120000,"max":160000,"currency":"USD","confidence":"high","note":"x"}'))
-      .toEqual({ min: 120000, max: 160000, currency: 'USD', confidence: 'high', note: 'x' });
-    expect(parseSalary('{}')).toEqual({ min: null, max: null, currency: 'USD', confidence: 'low', note: '' });
+      .toEqual({ min: 120000, max: 160000, currency: 'USD', confidence: 'high', note: 'x', soc: null });
+    expect(parseSalary('{}')).toEqual({ min: null, max: null, currency: 'USD', confidence: 'low', note: '', soc: null });
     expect(parseSalary('{"confidence":"bogus"}').confidence).toBe('low');
+  });
+  it('normalizes SOC codes for BLS grounding', () => {
+    expect(parseSalary('{"soc":"15-1252"}').soc).toBe('15-1252');
+    expect(parseSalary('{"soc":"151252"}').soc).toBe('15-1252');
+    expect(parseSalary('{"soc":"not a code"}').soc).toBeNull();
   });
 });
 

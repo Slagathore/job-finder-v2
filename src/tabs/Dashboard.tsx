@@ -4,7 +4,7 @@ import type { ScanSummary } from '../types';
 export function Dashboard() {
   const [total, setTotal] = useState<number | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
-  const [followups, setFollowups] = useState<any[]>([]);
+  const [today, setToday] = useState<{ followups: any[]; freshFits: any[]; staleApps: any[] } | null>(null);
   const [gs, setGs] = useState<{ llm: boolean; contact: boolean; jobs: boolean; experience: boolean; embedded: boolean; extension: boolean } | null>(null);
   const [digest, setDigest] = useState<any>(null);
   const [heat, setHeat] = useState<{ grid: { date: string; count: number }[]; streak: number; total: number } | null>(null);
@@ -24,7 +24,7 @@ export function Dashboard() {
     setTotal(c.total);
     const jl = await window.api.jobs.list({ limit: 50 });
     setJobs(jl);
-    setFollowups(await window.api.followups.list());
+    setToday(await window.api.digest.today());
     const [health, settings, items, prof] = await Promise.all([
       window.api.llm.health(), window.api.settings.get(),
       window.api.experience.list(), window.api.experience.getProfile(),
@@ -129,18 +129,51 @@ export function Dashboard() {
         </p>
       )}
 
-      {followups.length > 0 && (
+      {today && (today.followups.length > 0 || today.freshFits.length > 0 || today.staleApps.length > 0) && (
         <div className="profile-card" style={{ marginBottom: 14 }}>
-          <h2>Follow-ups due ({followups.length})</h2>
-          <table className="jobs"><tbody>
-            {followups.slice(0, 8).map(f => (
-              <tr key={f.appId}>
-                <td><a href={f.url} target="_blank" rel="noreferrer">{f.title}</a> <span className="muted small">— {f.company}</span></td>
-                <td className="muted small">{f.state} · {f.daysSince}d</td>
-                <td className="muted small">{f.action}</td>
-              </tr>
-            ))}
-          </tbody></table>
+          <h2>Today</h2>
+          {today.followups.length > 0 && (
+            <>
+              <p className="muted small" style={{ margin: '8px 0 2px' }}>Follow-ups due</p>
+              <table className="jobs"><tbody>
+                {today.followups.map(f => (
+                  <tr key={`fu${f.appId}`}>
+                    <td><a href={f.url} target="_blank" rel="noreferrer">{f.title}</a> <span className="muted small">— {f.company}</span></td>
+                    <td className="muted small">{f.state} · {f.daysSince}d</td>
+                    <td className="muted small">{f.action}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </>
+          )}
+          {today.freshFits.length > 0 && (
+            <>
+              <p className="muted small" style={{ margin: '8px 0 2px' }}>Fresh fits surfaced for you</p>
+              <table className="jobs"><tbody>
+                {today.freshFits.map(j => (
+                  <tr key={`ff${j.id}`}>
+                    <td><a href={j.url} target="_blank" rel="noreferrer">{j.title}</a> <span className="muted small">— {j.company}</span></td>
+                    <td className="muted small">{j.fit_score ? `fit ${j.fit_score}` : 'surfaced'}</td>
+                    <td className="muted small">{j.work_mode || ''}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </>
+          )}
+          {today.staleApps.length > 0 && (
+            <>
+              <p className="muted small" style={{ margin: '8px 0 2px' }}>Gone quiet (10+ days, consider a nudge or moving on)</p>
+              <table className="jobs"><tbody>
+                {today.staleApps.map(a => (
+                  <tr key={`sa${a.appId}`}>
+                    <td><a href={a.url} target="_blank" rel="noreferrer">{a.title}</a> <span className="muted small">— {a.company}</span></td>
+                    <td className="muted small">{a.daysSince}d silent</td>
+                    <td />
+                  </tr>
+                ))}
+              </tbody></table>
+            </>
+          )}
         </div>
       )}
 
