@@ -18,4 +18,12 @@ function scrapeZip() {
 }
 
 chrome.runtime.onMessage.addListener((m, _s, resp) => { if (m.cmd === 'harvest') { resp({ jobs: scrapeZip() }); return true; } });
-setTimeout(async () => { const { autoHarvest } = await chrome.storage.local.get('autoHarvest'); if (!autoHarvest) return; const jobs = scrapeZip(); if (jobs.length) chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs }); }, 1800);
+setTimeout(async () => {
+  const { autoHarvest } = await chrome.storage.local.get('autoHarvest');
+  if (!autoHarvest) return;
+  const jobs = scrapeZip();
+  if (jobs.length) chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs });
+  else if (/^\/(jobs-search|candidate\/search|jobs\b)/.test(location.pathname)) {
+    chrome.runtime.sendMessage({ cmd: 'scraperStale', site: 'ziprecruiter', url: location.href });
+  }
+}, 1800);

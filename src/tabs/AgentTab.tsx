@@ -7,10 +7,11 @@ export function AgentTab({ onOpenTab }: { onOpenTab: (tab: string) => void }) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [perms, setPerms] = useState<{ capability: string; mode: string }[]>([]);
+  const [permsLoading, setPermsLoading] = useState(true);
   const [showPerms, setShowPerms] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { window.api.agent.permissions().then(setPerms); }, []);
+  useEffect(() => { window.api.agent.permissions().then(p => { setPerms(p); setPermsLoading(false); }); }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
 
   function history() {
@@ -62,6 +63,7 @@ export function AgentTab({ onOpenTab }: { onOpenTab: (tab: string) => void }) {
         <div className="profile-card">
           <h2>Capability permissions</h2>
           <p className="muted small">Default: everything auto except <b>apply</b> (off) and <b>self_extension</b> (confirm).</p>
+          {permsLoading && <div className="loading-bar medium" />}
           <div className="perms">
             {perms.map(p => (
               <label key={p.capability} className="perm">

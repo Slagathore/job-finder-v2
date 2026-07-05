@@ -37,6 +37,15 @@ describe('handleRequest', () => {
     expect(d.ingestJobs).toHaveBeenCalledWith([{ title: 'x', url: 'u' }]);
   });
 
+  it('routes scraper staleness reports (auth required)', () => {
+    const stale = vi.fn();
+    const r = handleRequest('POST', '/ingest/stale', { 'x-jf-token': 'secret' },
+      { site: 'indeed', url: 'https://indeed.com/jobs?q=x' }, deps({ scraperStale: stale }));
+    expect(r.status).toBe(200);
+    expect(stale).toHaveBeenCalledWith('indeed', 'https://indeed.com/jobs?q=x');
+    expect(handleRequest('POST', '/ingest/stale', {}, { site: 'indeed' }, deps()).status).toBe(401);
+  });
+
   it('ingests fields + serves status, 404s unknown routes', () => {
     expect(handleRequest('POST', '/ingest/fields', { 'x-jf-token': 'secret' }, { fields: [{ label: 'a', value: 'b' }] }, deps()).body)
       .toEqual({ saved: 3 });

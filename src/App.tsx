@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { HealthBadge } from './components/HealthBadge';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { celebrate } from './lib/celebrate';
+import { FeedbackHost, toast } from './lib/feedback';
 import { Dashboard } from './tabs/Dashboard';
 import { SettingsTab } from './tabs/SettingsTab';
 import { BoardsTab } from './tabs/BoardsTab';
@@ -10,7 +12,6 @@ import { AgentTab } from './tabs/AgentTab';
 import { SelfExtendTab } from './tabs/SelfExtendTab';
 import { PipelineTab } from './tabs/PipelineTab';
 import { CareerTab } from './tabs/CareerTab';
-import { Placeholder } from './tabs/Placeholder';
 
 type TabId = 'dashboard' | 'search' | 'pipeline' | 'experience' | 'boards' | 'career' | 'agent' | 'selfext' | 'settings';
 
@@ -32,6 +33,14 @@ export default function App() {
   const lastCelebrated = useRef<number>(-1);
 
   useEffect(() => { window.api.app.version().then(setVersion); }, []);
+
+  useEffect(() => {
+    function onRejection(e: PromiseRejectionEvent) {
+      toast(String((e.reason && e.reason.message) ?? e.reason), 'error');
+    }
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => window.removeEventListener('unhandledrejection', onRejection);
+  }, []);
 
   // Confetti + chime when an email is classified interview/offer.
   useEffect(() => {
@@ -68,16 +77,19 @@ export default function App() {
       </aside>
 
       <main className="content">
-        {tab === 'dashboard' && <Dashboard />}
-        {tab === 'settings' && <SettingsTab />}
-        {tab === 'search' && <SearchTab />}
-        {tab === 'pipeline' && <PipelineTab />}
-        {tab === 'experience' && <ExperienceTab />}
-        {tab === 'boards' && <BoardsTab />}
-        {tab === 'career' && <CareerTab />}
-        {tab === 'agent' && <AgentTab onOpenTab={(t) => setTab(t as TabId)} />}
-        {tab === 'selfext' && <SelfExtendTab />}
+        <ErrorBoundary>
+          {tab === 'dashboard' && <Dashboard />}
+          {tab === 'settings' && <SettingsTab />}
+          {tab === 'search' && <SearchTab />}
+          {tab === 'pipeline' && <PipelineTab />}
+          {tab === 'experience' && <ExperienceTab />}
+          {tab === 'boards' && <BoardsTab />}
+          {tab === 'career' && <CareerTab />}
+          {tab === 'agent' && <AgentTab onOpenTab={(t) => setTab(t as TabId)} />}
+          {tab === 'selfext' && <SelfExtendTab />}
+        </ErrorBoundary>
       </main>
+      <FeedbackHost />
     </div>
   );
 }

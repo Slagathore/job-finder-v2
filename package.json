@@ -19,6 +19,7 @@
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "dist": "npm run build && electron-builder --win nsis portable --publish never",
     "dist:portable": "npm run build && electron-builder --win portable --publish never",
+    "ext:pack": "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force dist-installer | Out-Null; Compress-Archive -Path extension/* -DestinationPath dist-installer/job-finder-extension.zip -Force; Write-Output 'dist-installer/job-finder-extension.zip'\"",
     "postinstall": "electron-builder install-app-deps || echo skipped"
   },
   "dependencies": {

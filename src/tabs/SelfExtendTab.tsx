@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { confirmDialog } from '../lib/feedback';
 
 export function SelfExtendTab() {
   const [instruction, setInstruction] = useState('');
@@ -7,8 +8,9 @@ export function SelfExtendTab() {
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
   const [list, setList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  async function refresh() { setList(await window.api.selfext.list()); }
+  async function refresh() { setList(await window.api.selfext.list()); setLoading(false); }
   useEffect(() => { refresh(); }, []);
 
   async function propose() {
@@ -27,7 +29,13 @@ export function SelfExtendTab() {
     setSandbox(r); refresh();
   }
   async function approve() {
-    if (!confirm('Apply this patch to the live app code? You can roll back afterward.')) return;
+    const ok = await confirmDialog({
+      title: 'Apply patch',
+      message: 'Apply this patch to the live app code? You can roll back afterward.',
+      confirmLabel: 'Apply',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy('Applying + backing up…');
     const r = await window.api.selfext.approve(proposal.id);
     setBusy('');
@@ -36,7 +44,13 @@ export function SelfExtendTab() {
   }
   async function reject() { await window.api.selfext.reject(proposal.id); setProposal(null); setSandbox(null); refresh(); }
   async function rollback(id: number) {
-    if (!confirm('Roll back this applied patch?')) return;
+    const ok = await confirmDialog({
+      title: 'Roll back patch',
+      message: 'Roll back this applied patch?',
+      confirmLabel: 'Roll back',
+      danger: true,
+    });
+    if (!ok) return;
     const r = await window.api.selfext.rollback(id);
     setMsg('error' in r && r.error ? `⚠️ ${r.error}` : 'Rolled back. Rebuild/restart to revert.');
     refresh();
@@ -56,7 +70,7 @@ export function SelfExtendTab() {
       <div className="row">
         <button className="primary" onClick={propose} disabled={!!busy}>Propose patch</button>
         {busy && <span className="muted small">{busy}</span>}
-        {msg && <span className="muted small">{msg}</span>}
+        {msg && <span className={msg.startsWith('⚠️') ? 'msg-error' : 'msg-success'}>{msg}</span>}
       </div>
 
       {proposal && (
@@ -94,6 +108,14 @@ export function SelfExtendTab() {
       )}
 
       <h2>History</h2>
+      {loading ? (
+        <>
+          <div className="loading-bar long" />
+          <div className="loading-bar medium" />
+        </>
+      ) : list.length === 0 ? (
+        <p className="muted">No patches proposed yet.</p>
+      ) : (
       <table className="jobs">
         <thead><tr><th>#</th><th>Rationale</th><th>Status</th><th></th></tr></thead>
         <tbody>
@@ -102,11 +124,12 @@ export function SelfExtendTab() {
               <td>{p.id}</td>
               <td>{p.rationale}</td>
               <td className="muted small">{p.status}</td>
-              <td>{p.status === 'applied' && <button className="link" onClick={() => rollback(p.id)}>rollback</button>}</td>
+              <td>{p.status === 'applied' && <button className="link" aria-label={`Roll back patch ${p.id}`} onClick={() => rollback(p.id)}>rollback</button>}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }

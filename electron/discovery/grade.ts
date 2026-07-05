@@ -44,10 +44,13 @@ Return the fit JSON.` },
 }
 
 export function parseGrade(text: string): GradeResult {
-  const p = parseJsonLoose<any>(text) ?? {};
-  const g = typeof p.grade === 'string' ? p.grade.toUpperCase().trim() : 'F';
+  const p = parseJsonLoose<any>(text);
+  const g = typeof p?.grade === 'string' ? p.grade.toUpperCase().trim() : '';
+  // A missing/garbled grade is an ERROR, not an 'F' — silently storing F would
+  // systematically bury good jobs on any transient LLM parse hiccup.
+  if (!p || !GRADES.includes(g)) throw new Error('Model did not return a usable grade JSON — try again.');
   return {
-    grade: (GRADES.includes(g) ? g : 'F') as Grade,
+    grade: g as Grade,
     rationale: typeof p.rationale === 'string' ? p.rationale : '',
     supporting_item_ids: Array.isArray(p.supporting_item_ids)
       ? p.supporting_item_ids.filter((x: any) => Number.isInteger(x))

@@ -6,11 +6,13 @@
 
 export interface HubDeps {
   token: string;
-  ingestJobs: (jobs: any[]) => { added: number; duplicates: number; skipped: number };
+  ingestJobs: (jobs: any[]) => { added: number; duplicates: number; skipped: number; updated?: number };
   ingestFields: (fields: any[]) => { saved: number };
   status: () => any;
   appVersion: string;
   oauthCallback?: (code: string) => Promise<string>;
+  /** Extension found 0 job cards on a results page — selectors likely stale. */
+  scraperStale?: (site: string, url: string) => void;
 }
 
 export interface RouteResult { status: number; body: any | null; }
@@ -42,6 +44,10 @@ export function handleRequest(
   if (method === 'POST' && path === '/ingest/fields') {
     const fields = Array.isArray(body?.fields) ? body.fields : [];
     return { status: 200, body: deps.ingestFields(fields) };
+  }
+  if (method === 'POST' && path === '/ingest/stale') {
+    deps.scraperStale?.(String(body?.site ?? 'unknown'), String(body?.url ?? ''));
+    return { status: 200, body: { ok: true } };
   }
   if (method === 'GET' && path === '/status') {
     return { status: 200, body: deps.status() };

@@ -1,40 +1,45 @@
 import React, { useEffect, useState } from 'react';
+import { confirmDialog, toast } from '../lib/feedback';
 
 const pill = (v: string) => <span className={`pill pill-${v}`}>{v}</span>;
 
 export function CareerTab() {
   const [watch, setWatch] = useState<any[]>([]);
   const [watchName, setWatchName] = useState('');
-  useEffect(() => { window.api.watch.list().then(setWatch); }, []);
+  const [watchLoading, setWatchLoading] = useState(true);
+  useEffect(() => { window.api.watch.list().then(w => { setWatch(w); setWatchLoading(false); }); }, []);
   async function addWatch() { if (!watchName.trim()) return; await window.api.watch.add(watchName.trim()); setWatchName(''); setWatch(await window.api.watch.list()); }
-  async function rmWatch(id: number) { await window.api.watch.remove(id); setWatch(await window.api.watch.list()); }
+  async function rmWatch(id: number, label: string) {
+    const ok = await confirmDialog({ title: 'Stop watching', message: `Stop watching "${label}"?`, confirmLabel: 'Remove', danger: true });
+    if (!ok) return;
+    await window.api.watch.remove(id); setWatch(await window.api.watch.list());
+  }
   const [moves, setMoves] = useState<any[] | null>(null);
   const [field, setField] = useState('');
   const [certs, setCerts] = useState<any[] | null>(null);
   const [company, setCompany] = useState('');
   const [intel, setIntel] = useState<any>(null);
   const [busy, setBusy] = useState('');
-  const [msg, setMsg] = useState('');
 
   async function loadMoves() {
-    setBusy('moves'); setMsg('');
+    setBusy('moves');
     const r = await window.api.intel.moves();
     setBusy('');
-    if ('error' in r) setMsg(`⚠️ ${r.error}`); else setMoves(r.moves);
+    if ('error' in r) toast(r.error, 'error'); else setMoves(r.moves);
   }
   async function loadCerts() {
     if (!field.trim()) return;
-    setBusy('certs'); setMsg('');
+    setBusy('certs');
     const r = await window.api.intel.certs(field.trim());
     setBusy('');
-    if ('error' in r) setMsg(`⚠️ ${r.error}`); else setCerts(r.certs);
+    if ('error' in r) toast(r.error, 'error'); else setCerts(r.certs);
   }
   async function loadCompany() {
     if (!company.trim()) return;
-    setBusy('company'); setMsg('');
+    setBusy('company');
     const r = await window.api.intel.company(company.trim());
     setBusy('');
-    if ('error' in r) setMsg(`⚠️ ${r.error}`); else setIntel(r);
+    if ('error' in r) toast(r.error, 'error'); else setIntel(r);
   }
 
   return (
@@ -90,14 +95,18 @@ export function CareerTab() {
           <input placeholder="company to watch" value={watchName} onChange={e => setWatchName(e.target.value)} />
           <button className="primary" onClick={addWatch}>Watch</button>
         </div>
-        {watch.length > 0 && (
+        {watchLoading ? (
+          <div className="loading-bar short" />
+        ) : watch.length > 0 && (
           <ul className="rules">
-            {watch.map(w => <li key={w.id}>{w.label || w.normalized_name}<button className="link" onClick={() => rmWatch(w.id)}>×</button></li>)}
+            {watch.map(w => (
+              <li key={w.id}>{w.label || w.normalized_name}
+                <button className="link" aria-label={`Stop watching ${w.label || w.normalized_name}`} onClick={() => rmWatch(w.id, w.label || w.normalized_name)}>×</button>
+              </li>
+            ))}
           </ul>
         )}
       </div>
-
-      {msg && <p className="muted small">{msg}</p>}
     </div>
   );
 }

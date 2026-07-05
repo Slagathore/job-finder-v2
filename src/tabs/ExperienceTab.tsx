@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { confirmDialog, toast } from '../lib/feedback';
 
 export function ExperienceTab() {
   const [items, setItems] = useState<any[]>([]);
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState('');
-  const [msg, setMsg] = useState('');
   const [profile, setProfile] = useState<any>(null);
   const [roleFits, setRoleFits] = useState<any[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
@@ -13,6 +13,7 @@ export function ExperienceTab() {
   const [ruleText, setRuleText] = useState('');
   const [ruleScope, setRuleScope] = useState('resume');
   const [llmDown, setLlmDown] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
     setItems(await window.api.experience.list());
@@ -21,6 +22,7 @@ export function ExperienceTab() {
     setRules(await window.api.rules.list());
     const h = await window.api.llm.health();
     setLlmDown(!(h.ollamaUp || h.anthropicConfigured));
+    setLoading(false);
   }
   const NEED_AI = 'No line items created — the AI isn’t connected. Start Ollama (and `ollama pull nomic-embed-text`) or set an Anthropic key in Settings.';
   useEffect(() => { refresh(); }, []);
@@ -30,7 +32,11 @@ export function ExperienceTab() {
     await window.api.rules.add(ruleScope, ruleText.trim());
     setRuleText(''); setRules(await window.api.rules.list());
   }
-  async function delRule(id: number) { await window.api.rules.delete(id); setRules(await window.api.rules.list()); }
+  async function delRule(id: number) {
+    const ok = await confirmDialog({ title: 'Remove rule', message: 'Remove this rule?', confirmLabel: 'Remove', danger: true });
+    if (!ok) return;
+    await window.api.rules.delete(id); setRules(await window.api.rules.list());
+  }
 
   async function importFile() {
     const fp = await window.api.app.pickPath({
@@ -38,29 +44,31 @@ export function ExperienceTab() {
       filters: [{ name: 'Resumes/Docs', extensions: ['pdf', 'docx', 'md', 'txt'] }],
     });
     if (!fp) return;
-    setBusy('Reading + digesting file…'); setMsg('');
+    setBusy('Reading + digesting file…');
     const r = await window.api.experience.importFile(fp);
     setBusy('');
-    setMsg('error' in r ? `⚠️ ${r.error}` : r.added === 0 ? `⚠️ ${NEED_AI}` : `Added ${r.added} line items from ${r.source}.`);
+    if ('error' in r) toast(r.error, 'error');
+    else if (r.added === 0) toast(NEED_AI, 'error');
+    else toast(`Added ${r.added} line items from ${r.source}.`, 'success');
     refresh();
   }
 
   async function digestPaste() {
     if (!paste.trim()) return;
-    setBusy('Digesting text…'); setMsg('');
+    setBusy('Digesting text…');
     const r = await window.api.experience.importText(paste, 'pasted');
     setBusy('');
-    if ('error' in r) setMsg(`⚠️ ${r.error}`);
-    else if (r.added === 0) setMsg(`⚠️ ${NEED_AI}`);
-    else { setMsg(`Added ${r.added} line items.`); setPaste(''); }
+    if ('error' in r) toast(r.error, 'error');
+    else if (r.added === 0) toast(NEED_AI, 'error');
+    else { toast(`Added ${r.added} line items.`, 'success'); setPaste(''); }
     refresh();
   }
 
   async function analyze() {
-    setBusy('Analyzing experience → profile & role fits…'); setMsg('');
+    setBusy('Analyzing experience → profile & role fits…');
     const r = await window.api.experience.infer();
     setBusy('');
-    if ('error' in r) setMsg(`⚠️ ${r.error}`);
+    if ('error' in r) toast(r.error, 'error');
     else { setProfile(r.profile); setRoleFits(r.roleFits); }
   }
 
@@ -75,7 +83,7 @@ export function ExperienceTab() {
     if (!answers.trim()) return;
     setBusy('Digesting answers…');
     await window.api.experience.importText(answers, 'qa');
-    setBusy(''); setAnswers(''); setMsg('Answers digested into line items.');
+    setBusy(''); setAnswers(''); toast('Answers digested into line items.', 'success');
     refresh();
   }
 
@@ -88,7 +96,8 @@ export function ExperienceTab() {
   }
   async function del(id: number) { await window.api.experience.delete(id); refresh(); }
   async function clearAll() {
-    if (!confirm('Delete ALL experience line items?')) return;
+    const ok = await confirmDialog({ title: 'Delete all experience', message: 'Delete ALL experience line items? This cannot be undone.', confirmLabel: 'Delete all', danger: true });
+    if (!ok) return;
     await window.api.experience.clear(); refresh();
   }
 
@@ -111,7 +120,6 @@ export function ExperienceTab() {
       <div className="row">
         <button className="primary" onClick={digestPaste} disabled={!!busy || !paste.trim()}>Digest text</button>
         {busy && <span className="muted small">{busy}</span>}
-        {msg && <span className="muted small">{msg}</span>}
       </div>
 
       <div className="row">
@@ -147,7 +155,7 @@ export function ExperienceTab() {
           <ul className="rules">
             {rules.map(r => (
               <li key={r.id}><span className="chip">{r.scope}</span> {r.text}
-                <button className="link" onClick={() => delRule(r.id)}>×</button></li>
+                <button className="link" aria-label={`Remove rule: ${r.text}`} onClick={() => delRule(r.id)}>×</button></li>
             ))}
           </ul>
         )}
@@ -186,7 +194,13 @@ export function ExperienceTab() {
         </>
       )}
 
-      {items.length > 0 && (
+      {loading ? (
+        <>
+          <h2>Line items</h2>
+          <div className="loading-bar medium" />
+          <div className="loading-bar long" />
+        </>
+      ) : items.length > 0 && (
         <>
           <h2>Line items</h2>
           <table className="jobs">
@@ -197,7 +211,7 @@ export function ExperienceTab() {
                   <td className="muted small">{i.kind}</td>
                   <td>{i.text}</td>
                   <td className="muted small">{i.employer || i.role || '—'}</td>
-                  <td><button className="link" onClick={() => del(i.id)}>×</button></td>
+                  <td><button className="link" aria-label={`Delete line item: ${i.text}`} onClick={() => del(i.id)}>×</button></td>
                 </tr>
               ))}
             </tbody>

@@ -39,4 +39,7 @@ setTimeout(async () => {
   if (!autoHarvest) return;
   const jobs = scrapeCareerBuilder();
   if (jobs.length) chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs });
+  else if (/^\/jobs\b/.test(location.pathname)) {
+    chrome.runtime.sendMessage({ cmd: 'scraperStale', site: 'careerbuilder', url: location.href });
+  }
 }, 1800);

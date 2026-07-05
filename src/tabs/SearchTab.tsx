@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { toast, promptDialog } from '../lib/feedback';
 
 const MODES = ['remote', 'hybrid', 'onsite'];
 
@@ -89,9 +90,11 @@ export function SearchTab() {
   }
   async function runSearch() { await execSearch(savedObj()); }
   async function saveSearch() {
-    const name = prompt('Name this search:'); if (!name) return;
+    const name = await promptDialog({ title: 'Save search', message: 'Name this search', placeholder: 'e.g. PM · remote · DFW' });
+    if (!name) return;
     await window.api.searches.save(name, savedObj());
     setSaved(await window.api.searches.list());
+    toast(`Saved “${name}”.`, 'success');
   }
   function loadParams(p: any) {
     setTags(p.tags || ''); setRoleFamily(p.roleFamily || ''); setKeyword(p.keyword || '');
@@ -99,6 +102,30 @@ export function SearchTab() {
     setLocText(p.locText || ''); setRadius(p.radiusMi ? String(p.radiusMi) : '50');
     setLoc(p.location ? { lat: p.location.lat, lng: p.location.lng, label: p.locText || 'saved' } : null);
     execSearch(p);
+  }
+
+  // One-click Indeed: build a real Indeed search URL from the current filters
+  // and open it in the default browser. With the extension paired and
+  // auto-harvest on, results (and pagination) stream straight into the DB.
+  function indeedUrl(): string | null {
+    const q = keyword.trim()
+      || tags.split(',').map(t => t.trim()).filter(Boolean).join(' ')
+      || roleFamily;
+    if (!q) return null;
+    const u = new URL('https://www.indeed.com/jobs');
+    u.searchParams.set('q', q);
+    const remoteOnly = modes.length === 1 && modes[0] === 'remote';
+    const l = remoteOnly ? 'Remote' : locText.trim();
+    if (l) u.searchParams.set('l', l);
+    const r = Number(radius);
+    if (!remoteOnly && l && r > 0) u.searchParams.set('radius', String(Math.min(100, r)));
+    return u.toString();
+  }
+  async function openIndeed() {
+    const u = indeedUrl();
+    if (!u) { toast('Add tags, a keyword, or pick a role family first.', 'error'); return; }
+    await window.api.app.openExternal(u);
+    toast('Indeed opened — with the extension paired + auto-harvest on, jobs stream in here automatically.');
   }
 
   async function discover() {
@@ -162,7 +189,11 @@ export function SearchTab() {
   }
   async function block(company: string) {
     await window.api.blocklist.add(company);
-    setMsg(`Blocked ${company}.`);
+    toast(`Blocked ${company} — future scans will skip it.`, 'success');
+  }
+  async function watchCompany(company: string) {
+    await window.api.watch.add(company);
+    toast(`Watching ${company} for new postings.`, 'success');
   }
   async function estSalary(id: number) {
     setSal(s => ({ ...s, [id]: { busy: true } }));
@@ -176,8 +207,9 @@ export function SearchTab() {
       <h1>Search &amp; Discover</h1>
 
       <div className="row">
-        <button className="primary" onClick={embed} disabled={!!busy}>Embed jobs + experience</button>
+        <button className="primary" onClick={openIndeed} title="Opens indeed.com with these filters — the paired extension harvests results automatically">Search Indeed ↗</button>
         <button className="primary" onClick={discover} disabled={!!busy}>Discover best fits ✨</button>
+        <button className="primary" onClick={embed} disabled={!!busy}>Embed jobs + experience</button>
         <button className="primary" onClick={geocodeJobs} disabled={!!busy}>Geocode job locations</button>
         {busy && <span className="muted small">{busy}</span>}
       </div>
@@ -207,8 +239,10 @@ export function SearchTab() {
         <div className="savedrow">
           <span className="muted small">Recent:</span>
           {history.slice(0, 6).map(h => {
-            const p = h.params; const lbl = [p.tags, p.roleFamily, p.keyword].filter(Boolean).join(' ') || '(filters)';
-            return <span key={h.id} className="chip" onClick={() => loadParams(p)}>{lbl.slice(0, 28)}</span>;
+            const p = h.params;
+            const lbl = [p.tags, p.roleFamily, p.keyword, p.locText, (p.workModes || []).join('/')]
+              .map((x: any) => String(x ?? '').trim()).filter(Boolean).join(' · ') || 'all jobs';
+            return <span key={h.id} className="chip" title={lbl} onClick={() => loadParams(p)}>{lbl.slice(0, 34)}</span>;
           })}
         </div>
       )}
@@ -259,7 +293,7 @@ export function SearchTab() {
           {rows.map(j => (
             <tr key={j.id} className={j.surfaced ? 'surfaced' : ''}>
               <td><input type="checkbox" checked={selected.has(j.id)} onChange={() => toggleSelect(j.id)} /></td>
-              <td><button className="star" onClick={() => star(j)}>{j.starred ? '★' : '☆'}</button></td>
+              <td><button className="star" aria-label={j.starred ? 'Unstar job' : 'Star job'} onClick={() => star(j)}>{j.starred ? '★' : '☆'}</button></td>
               <td title={`sim ${(j.sim ?? 0).toFixed(3)}`}>
                 <b>{grades[j.id]?.grade ?? j.fit_grade ?? '—'}</b>
                 {typeof j.sim === 'number' && j.sim > 0 && <span className="muted small"> {Math.round(j.sim * 100)}%</span>}
@@ -277,7 +311,7 @@ export function SearchTab() {
               <td>
                 {j.pay ? `$${(j.pay / 1000).toFixed(0)}k` : (j.salary_listed || '—')}
                 {sal[j.id] && !sal[j.id].busy && !sal[j.id].error &&
-                  <div className="muted small">est {fmtK(sal[j.id].min)}–{fmtK(sal[j.id].max)} ({sal[j.id].confidence})</div>}
+                  <div className="muted small" title="LLM estimate — not verified against live salary data">est {fmtK(sal[j.id].min)}–{fmtK(sal[j.id].max)} ({sal[j.id].confidence}, LLM est.)</div>}
               </td>
               <td className="rowacts">
                 <button className="link" onClick={() => grade(j.id)}>grade</button>
@@ -286,7 +320,7 @@ export function SearchTab() {
                 {docs[j.id]?.cv && <button className="link" onClick={() => openPath(docs[j.id].cv)}>CV</button>}
                 {docs[j.id]?.cover && <button className="link" onClick={() => openPath(docs[j.id].cover)}>cover</button>}
                 <button className="link" onClick={() => block(j.company)}>block</button>
-                <button className="link" onClick={() => window.api.watch.add(j.company)}>watch</button>
+                <button className="link" onClick={() => watchCompany(j.company)}>watch</button>
               </td>
             </tr>
           ))}

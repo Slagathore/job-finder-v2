@@ -11,6 +11,7 @@ export function Dashboard() {
   const [scanning, setScanning] = useState(false);
   const [summary, setSummary] = useState<ScanSummary | null>(null);
   const [scanErr, setScanErr] = useState('');
+  const [loading, setLoading] = useState(true);
 
   // LLM smoke test state
   const [prompt, setPrompt] = useState('In one sentence, say hello and name the model answering.');
@@ -38,6 +39,7 @@ export function Dashboard() {
     });
     setDigest(await window.api.digest.get());
     setHeat(await window.api.activity.heatmap(16));
+    setLoading(false);
   }
   function heatColor(n: number): string {
     if (n <= 0) return 'var(--panel2)';
@@ -107,7 +109,7 @@ export function Dashboard() {
 
       <div className="cards">
         <div className="card">
-          <div className="card-n">{total ?? '—'}</div>
+          <div className="card-n">{loading ? <span className="loading-bar short" /> : total ?? '—'}</div>
           <div className="card-l">jobs in database</div>
         </div>
         <div className="card">
@@ -143,7 +145,13 @@ export function Dashboard() {
       )}
 
       <h2>Recent jobs</h2>
-      {jobs.length === 0 ? (
+      {loading ? (
+        <>
+          <div className="loading-bar long" />
+          <div className="loading-bar medium" />
+          <div className="loading-bar short" />
+        </>
+      ) : jobs.length === 0 ? (
         <p className="muted">No jobs yet — hit “Scan ATS boards now”.</p>
       ) : (
         <table className="jobs">

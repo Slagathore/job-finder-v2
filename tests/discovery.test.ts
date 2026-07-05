@@ -72,9 +72,12 @@ describe('rank helpers', () => {
 });
 
 describe('parseGrade', () => {
-  it('parses a grade payload + clamps unknown grade to F', () => {
+  it('parses a grade payload', () => {
     const r = parseGrade('{"grade":"B","rationale":"good overlap","supporting_item_ids":[1,2]}');
     expect(r).toEqual({ grade: 'B', rationale: 'good overlap', supporting_item_ids: [1, 2] });
-    expect(parseGrade('{"grade":"Z"}').grade).toBe('F');
+  });
+  it('throws on garbled output instead of silently grading F', () => {
+    expect(() => parseGrade('{"grade":"Z"}')).toThrow(/usable grade/);
+    expect(() => parseGrade('sorry, I cannot')).toThrow(/usable grade/);
   });
 });

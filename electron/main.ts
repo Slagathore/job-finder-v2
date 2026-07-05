@@ -33,6 +33,7 @@ import { getDb, closeDb } from './ipc/db';
 import { killAllChildren } from './selfext/exec';
 import { randomUUID } from 'crypto';
 import { runScan } from './scan/runner';
+import { runEmbeddings } from './discovery/service';
 import type { Server } from 'http';
 
 // Dev = unpackaged AND not forced to prod. JF_PROD lets `npm start` / a smoke
@@ -62,6 +63,7 @@ function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  if (embedTimer) { clearTimeout(embedTimer); embedTimer = null; }
   try { hubServer?.close(); } catch { /* */ }
   killAllChildren();
   closeDb();
@@ -187,13 +189,44 @@ function ensureHubToken(): string {
   return token;
 }
 
+// Auto-embed after extension harvests (PLAN §6.18 without the manual “Embed”
+// click): debounced so a burst of pages triggers one embedding run at the end.
+let embedTimer: NodeJS.Timeout | null = null;
+function scheduleAutoEmbed() {
+  if (embedTimer) clearTimeout(embedTimer);
+  embedTimer = setTimeout(() => {
+    embedTimer = null;
+    runEmbeddings(false)
+      .then(r => {
+        if (r.jobsEmbedded > 0) { console.log(`[auto-embed] ${r.jobsEmbedded} jobs embedded`); send('notify'); }
+      })
+      .catch(err => console.error('[auto-embed] failed (LLM down is fine):', err?.message ?? err));
+  }, 20_000);
+}
+
+// One stale alarm per site per 6h — a broken scraper shouldn't spam.
+const staleAlerted = new Map<string, number>();
+function scraperStale(site: string, url: string) {
+  const last = staleAlerted.get(site) ?? 0;
+  if (Date.now() - last < 6 * 3600_000) return;
+  staleAlerted.set(site, Date.now());
+  try { addNotification('scraper-stale', { site, url }); } catch { /* */ }
+  try { new Notification({ title: 'Job Finder', body: `${site} scraper found 0 jobs on a results page — selectors may be stale.` }).show(); } catch { /* */ }
+  send('notify');
+}
+
 function startIngressServer() {
   ensureHubToken();
   const port = Number(readSettings().hubPort) || 17893;
   hubServer = startHubServer(() => ({
     token: readSettings().hubToken,
-    ingestJobs,
+    ingestJobs: (jobs: any[]) => {
+      const r = ingestJobs(jobs);
+      if (r.added > 0 || r.updated > 0) { send('notify'); scheduleAutoEmbed(); }
+      return r;
+    },
     ingestFields,
+    scraperStale,
     status: () => ({ jobs: (getDb().prepare('SELECT COUNT(*) n FROM jobs').get() as { n: number }).n }),
     appVersion: app.getVersion(),
     oauthCallback: async (code: string) => {
@@ -213,7 +246,12 @@ function registerAppHandlers() {
   ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
   ipcMain.handle('app:show', () => showWindow());
   ipcMain.handle('app:openPath', (_e, p: string) => shell.openPath(p));
-  ipcMain.handle('app:openExternal', (_e, url: string) => shell.openExternal(url));
+  // Job URLs come from scraped/external sources — never hand file:/javascript:/
+  // custom-protocol strings to the OS shell.
+  ipcMain.handle('app:openExternal', (_e, url: string) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false;
+    return shell.openExternal(url);
+  });
   ipcMain.handle('app:setCloseToTray', (_e, v: boolean) => { closeToTray = !!v; return closeToTray; });
   ipcMain.handle('app:rearmScheduler', () => { armScheduler(); return true; });
   ipcMain.handle('app:pickPath', async (_e, opts: Electron.OpenDialogOptions = {}) => {
@@ -222,7 +260,15 @@ function registerAppHandlers() {
   });
 }
 
+// Crash safety net: log instead of dying silently. Boot failures get a visible
+// error box (otherwise a throw before createWindow leaves a headless zombie).
+process.on('unhandledRejection', (reason) => console.error('[unhandledRejection]', reason));
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
+
 app.whenReady().then(async () => {
+  // Default File/Edit menu bar clashes with the dark UI; keep it in dev for the
+  // reload/devtools accelerators.
+  if (!isDev) Menu.setApplicationMenu(null);
   initDb();
   migrateSecrets();
   seedBoardsIfEmpty();
@@ -261,6 +307,10 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+}).catch((err) => {
+  console.error('[boot] fatal:', err);
+  try { dialog.showErrorBox('Job Finder failed to start', String(err?.stack ?? err)); } catch { /* */ }
+  app.exit(1);
 });
 
 // Graceful teardown on every real quit path.

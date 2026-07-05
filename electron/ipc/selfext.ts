@@ -37,7 +37,15 @@ export function registerSelfExtHandlers() {
 
   ipcMain.handle('selfext:list', () => listProposals());
   ipcMain.handle('selfext:get', (_e, id: number) => getProposal(id));
-  ipcMain.handle('selfext:approve', (_e, id: number) => applyProposal(id));   // mandatory user action
+  // Mandatory user action — and the sandbox must have PASSED (lint + tests in a
+  // temp clone). Enforced here, not just in the UI: a patch that can rewrite
+  // main.ts must never apply unverified (AUDIT §self-ext gate).
+  ipcMain.handle('selfext:approve', (_e, id: number) => {
+    const p = getProposal(id);
+    if (!p) return { error: 'Proposal not found.' };
+    if (!p.sandbox?.ok) return { error: 'Sandbox checks have not passed for this proposal — run “Sandbox” (lint + tests) first.' };
+    return applyProposal(id);
+  });
   ipcMain.handle('selfext:reject', (_e, id: number) => { setStatus(id, 'rejected'); return { ok: true }; });
   ipcMain.handle('selfext:rollback', (_e, id: number) => rollbackProposal(id));
 }

@@ -1,12 +1,9 @@
 import * as http from 'http';
 import { handleRequest, type HubDeps } from './router';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-JF-Token',
-};
-
+// No CORS headers on purpose: the extension reaches us via MV3 host_permissions
+// (which bypass CORS), and the OAuth callback is a top-level navigation. A CORS
+// wildcard would let any webpage in a normal browser tab script requests here.
 const MAX_BODY = 8 * 1024 * 1024; // 8 MB cap
 
 /**
@@ -21,7 +18,7 @@ export function startHubServer(getDeps: () => HubDeps, port: number): http.Serve
 
     req.on('data', (c: Buffer) => {
       size += c.length;
-      if (size > MAX_BODY) { aborted = true; res.writeHead(413, CORS); res.end(); req.destroy(); return; }
+      if (size > MAX_BODY) { aborted = true; res.writeHead(413); res.end(); req.destroy(); return; }
       chunks.push(c);
     });
 
@@ -36,7 +33,7 @@ export function startHubServer(getDeps: () => HubDeps, port: number): http.Serve
         let msg = 'Missing authorization code.';
         try { if (code && getDeps().oauthCallback) msg = await getDeps().oauthCallback!(code); }
         catch (e: any) { msg = `Error: ${e?.message ?? e}`; }
-        res.writeHead(200, { ...CORS, 'Content-Type': 'text/html' });
+        res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(`<!doctype html><body style="font:16px sans-serif;padding:40px"><h2>Job Finder</h2><p>${msg}</p></body>`);
         return;
       }
@@ -44,7 +41,7 @@ export function startHubServer(getDeps: () => HubDeps, port: number): http.Serve
       let body: any = null;
       if (chunks.length) {
         try { body = JSON.parse(Buffer.concat(chunks).toString('utf-8')); }
-        catch { res.writeHead(400, { ...CORS, 'Content-Type': 'application/json' });
+        catch { res.writeHead(400, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Invalid JSON body' })); return; }
       }
       let out;
@@ -53,7 +50,7 @@ export function startHubServer(getDeps: () => HubDeps, port: number): http.Serve
       } catch (e: any) {
         out = { status: 500, body: { error: e?.message ?? String(e) } };
       }
-      const headers: Record<string, string> = { ...CORS };
+      const headers: Record<string, string> = {};
       if (out.body !== null) headers['Content-Type'] = 'application/json';
       res.writeHead(out.status, headers);
       res.end(out.body === null ? undefined : JSON.stringify(out.body));

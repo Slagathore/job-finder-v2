@@ -30,6 +30,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: true, data: await postJSON('/ingest/jobs', { jobs: msg.jobs || [] }) });
       } else if (msg.cmd === 'pushFields') {
         sendResponse({ ok: true, data: await postJSON('/ingest/fields', { fields: msg.fields || [] }) });
+      } else if (msg.cmd === 'scraperStale') {
+        sendResponse({ ok: true, data: await postJSON('/ingest/stale', { site: msg.site || 'unknown', url: msg.url || '' }) });
       } else {
         sendResponse({ ok: false, error: 'unknown command' });
       }

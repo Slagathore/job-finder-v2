@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import { confirmDialog, toast } from '../lib/feedback';
 
 export function BoardsTab() {
   const [boards, setBoards] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
-  const [msg, setMsg] = useState('');
   const [rowStatus, setRowStatus] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(true);
 
-  async function refresh() { setBoards(await window.api.boards.list()); }
+  async function refresh() { setBoards(await window.api.boards.list()); setLoading(false); }
   useEffect(() => { refresh(); }, []);
 
   async function probe(b: any) {
@@ -26,7 +27,7 @@ export function BoardsTab() {
   async function add() {
     if (!name.trim() || !url.trim()) return;
     const r = await window.api.boards.add({ name: name.trim(), url: url.trim() });
-    setMsg(r.detected ? `Added — detected ${r.detected} API ✓` : 'Added — no ATS API detected (DOM adapter needed, phase 7)');
+    toast(r.detected ? `Added — detected ${r.detected} API ✓` : 'Added — no ATS API detected (DOM adapter needed, phase 7)', r.detected ? 'success' : 'info');
     setName(''); setUrl('');
     refresh();
   }
@@ -35,7 +36,12 @@ export function BoardsTab() {
     await window.api.boards.setEnabled(id, enabled);
     refresh();
   }
-  async function remove(id: number) { await window.api.boards.delete(id); refresh(); }
+  async function remove(id: number, boardName: string) {
+    const ok = await confirmDialog({ title: 'Remove board', message: `Remove "${boardName}" from tracked boards?`, confirmLabel: 'Remove', danger: true });
+    if (!ok) return;
+    await window.api.boards.delete(id);
+    refresh();
+  }
 
   const enabledCount = boards.filter(b => b.enabled).length;
 
@@ -49,27 +55,36 @@ export function BoardsTab() {
         <input placeholder="Careers URL (Greenhouse / Ashby / Lever)" value={url} onChange={e => setUrl(e.target.value)} />
         <button className="primary" onClick={add}>Add</button>
       </div>
-      {msg && <p className="muted small">{msg}</p>}
 
       <p className="muted small">“Probe” finds the easiest ingress (ATS API → JSON-LD → DOM). If it says <i>dom</i>, “Learn” has the LLM infer selectors and saves a reusable adapter.</p>
-      <table className="jobs">
-        <thead><tr><th>On</th><th>Name</th><th>Ingress</th><th>URL</th><th>Actions</th></tr></thead>
-        <tbody>
-          {boards.map(b => (
-            <tr key={b.id}>
-              <td><input type="checkbox" checked={!!b.enabled} onChange={e => toggle(b.id, e.target.checked)} /></td>
-              <td>{b.name}{rowStatus[b.id] && <div className="muted small">{rowStatus[b.id]}</div>}</td>
-              <td className="muted small">{b.ingress}{b.status ? ` (${b.status})` : ''}{b.adapter_stale ? <span className="sev-high"> ⚠ stale — re-learn</span> : ''}</td>
-              <td className="muted small">{b.url}</td>
-              <td className="rowacts">
-                <button className="link" onClick={() => probe(b)}>probe</button>
-                <button className="link" onClick={() => learn(b)}>learn</button>
-                <button className="link" onClick={() => remove(b.id)}>remove</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {loading ? (
+        <>
+          <div className="loading-bar long" />
+          <div className="loading-bar medium" />
+          <div className="loading-bar short" />
+        </>
+      ) : boards.length === 0 ? (
+        <p className="muted">No boards tracked yet — add one above.</p>
+      ) : (
+        <table className="jobs">
+          <thead><tr><th>On</th><th>Name</th><th>Ingress</th><th>URL</th><th>Actions</th></tr></thead>
+          <tbody>
+            {boards.map(b => (
+              <tr key={b.id}>
+                <td><input type="checkbox" aria-label={`Enable scanning for ${b.name}`} checked={!!b.enabled} onChange={e => toggle(b.id, e.target.checked)} /></td>
+                <td>{b.name}{rowStatus[b.id] && <div className={rowStatus[b.id].startsWith('⚠️') ? 'msg-error' : 'muted small'}>{rowStatus[b.id]}</div>}</td>
+                <td className="muted small">{b.ingress}{b.status ? ` (${b.status})` : ''}{b.adapter_stale ? <span className="sev-high"> ⚠ stale — re-learn</span> : ''}</td>
+                <td className="muted small">{b.url}</td>
+                <td className="rowacts">
+                  <button className="link" aria-label={`Probe ${b.name}`} onClick={() => probe(b)}>probe</button>
+                  <button className="link" aria-label={`Learn selectors for ${b.name}`} onClick={() => learn(b)}>learn</button>
+                  <button className="link" aria-label={`Remove ${b.name}`} onClick={() => remove(b.id, b.name)}>remove</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

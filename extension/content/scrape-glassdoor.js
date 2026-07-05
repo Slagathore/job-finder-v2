@@ -19,4 +19,12 @@ function scrapeGlassdoor() {
 }
 
 chrome.runtime.onMessage.addListener((m, _s, resp) => { if (m.cmd === 'harvest') { resp({ jobs: scrapeGlassdoor() }); return true; } });
-setTimeout(async () => { const { autoHarvest } = await chrome.storage.local.get('autoHarvest'); if (!autoHarvest) return; const jobs = scrapeGlassdoor(); if (jobs.length) chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs }); }, 1800);
+setTimeout(async () => {
+  const { autoHarvest } = await chrome.storage.local.get('autoHarvest');
+  if (!autoHarvest) return;
+  const jobs = scrapeGlassdoor();
+  if (jobs.length) chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs });
+  else if (/^\/Job\//i.test(location.pathname)) {
+    chrome.runtime.sendMessage({ cmd: 'scraperStale', site: 'glassdoor', url: location.href });
+  }
+}, 1800);

@@ -14,3 +14,5 @@ button.primary { background: #5b8cff; border-color: #5b8cff; color: #fff; width:
 .status { font-size: 11px; color: #8b93a7; margin-top: 8px; min-height: 14px; }
 .toggles .chk { display: flex; align-items: center; gap: 6px; color: #e6e8ee; font-size: 12px; margin: 6px 0; }
 .toggles .chk input { margin: 0; }
+.toggles .pages { width: 44px; background: #1d2230; color: #e6e8ee; border: 1px solid #2a2f3d;
+  border-radius: 4px; padding: 2px 4px; font: inherit; }

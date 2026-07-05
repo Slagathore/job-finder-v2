@@ -18,4 +18,14 @@ function scrapeLinkedIn() {
 }
 
 chrome.runtime.onMessage.addListener((m, _s, resp) => { if (m.cmd === 'harvest') { resp({ jobs: scrapeLinkedIn() }); return true; } });
-setTimeout(async () => { const { autoHarvest } = await chrome.storage.local.get('autoHarvest'); if (!autoHarvest) return; const jobs = scrapeLinkedIn(); if (jobs.length) chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs }); }, 1800);
+setTimeout(async () => {
+  const { autoHarvest } = await chrome.storage.local.get('autoHarvest');
+  if (!autoHarvest) return;
+  const jobs = scrapeLinkedIn();
+  if (jobs.length) chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs });
+  // Only a jobs-search page with zero cards means the selectors are stale —
+  // this script runs on all of linkedin.com (feed, profiles, …).
+  else if (/^\/jobs\/(search|collections)/.test(location.pathname)) {
+    chrome.runtime.sendMessage({ cmd: 'scraperStale', site: 'linkedin', url: location.href });
+  }
+}, 1800);

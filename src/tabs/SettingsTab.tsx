@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { confirmDialog, toast } from '../lib/feedback';
 
 const FIELDS: { key: string; label: string; type?: string; hint?: string }[] = [
   { key: 'candidateName', label: 'Your name', hint: 'Used on generated resumes / cover letters' },
@@ -30,19 +31,23 @@ export function SettingsTab() {
   const [mailMsg, setMailMsg] = useState('');
   const [stats, setStats] = useState<any>(null);
   const [pruneMsg, setPruneMsg] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    window.api.settings.get().then(setS);
-    window.api.app.hubInfo().then(h => setHub({ url: h.url, token: h.token }));
-    window.api.blocklist.list().then(setBlocklist);
-    window.api.gmail.status().then(setGmail);
-    window.api.maintenance.stats().then(setStats);
+    Promise.all([
+      window.api.settings.get().then(setS),
+      window.api.app.hubInfo().then(h => setHub({ url: h.url, token: h.token })),
+      window.api.blocklist.list().then(setBlocklist),
+      window.api.gmail.status().then(setGmail),
+      window.api.maintenance.stats().then(setStats),
+    ]).then(() => setLoading(false));
   }, []);
 
   async function pruneNow() {
     setPruneMsg('Pruning…');
     const r = await window.api.maintenance.prune();
-    setPruneMsg(`Removed ${r.jobsDeleted} untouched jobs + ${r.notificationsDeleted} old notifications.`);
+    setPruneMsg('');
+    toast(`Removed ${r.jobsDeleted} untouched jobs + ${r.notificationsDeleted} old notifications.`, 'success');
     setStats(await window.api.maintenance.stats());
   }
 
@@ -66,7 +71,11 @@ export function SettingsTab() {
     await window.api.blocklist.add(blockName.trim());
     setBlockName(''); setBlocklist(await window.api.blocklist.list());
   }
-  async function removeBlock(id: number) { await window.api.blocklist.remove(id); setBlocklist(await window.api.blocklist.list()); }
+  async function removeBlock(id: number, blockedName: string) {
+    const ok = await confirmDialog({ title: 'Remove from blocklist', message: `Remove "${blockedName}" from the blocklist? Jobs from this company become applyable again.`, confirmLabel: 'Remove', danger: true });
+    if (!ok) return;
+    await window.api.blocklist.remove(id); setBlocklist(await window.api.blocklist.list());
+  }
 
   function update(key: string, value: any) { setS(prev => ({ ...prev, [key]: value })); setSaved(false); }
 
@@ -95,22 +104,30 @@ export function SettingsTab() {
         </div>
       )}
 
-      <div className="form">
-        {FIELDS.map(f => (
-          <label key={f.key} className="field">
-            <span className="field-l">{f.label}</span>
-            <input
-              type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-              value={s[f.key] ?? ''}
-              onChange={e => update(f.key, e.target.value)}
-            />
-            {f.hint && <span className="field-h">{f.hint}</span>}
-          </label>
-        ))}
-      </div>
+      {loading ? (
+        <>
+          <div className="loading-bar long" />
+          <div className="loading-bar medium" />
+          <div className="loading-bar long" />
+        </>
+      ) : (
+        <div className="form">
+          {FIELDS.map(f => (
+            <label key={f.key} className="field">
+              <span className="field-l">{f.label}</span>
+              <input
+                type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
+                value={s[f.key] ?? ''}
+                onChange={e => update(f.key, e.target.value)}
+              />
+              {f.hint && <span className="field-h">{f.hint}</span>}
+            </label>
+          ))}
+        </div>
+      )}
       <div className="row">
-        <button className="primary" onClick={save}>Save</button>
-        {saved && <span className="muted small">Saved ✓</span>}
+        <button className="primary" onClick={save} disabled={loading}>Save</button>
+        {saved && <span className="msg-success">Saved ✓</span>}
       </div>
 
       <div className="profile-card" style={{ marginTop: 18 }}>
@@ -134,7 +151,7 @@ export function SettingsTab() {
               : <button className="primary" onClick={checkMail}>Check mail now</button>}
             <button className="link" onClick={refreshGmail}>refresh status</button>
             {gmail.connected && <button className="link" onClick={disconnectGmail}>disconnect</button>}
-            {mailMsg && <span className="muted small">{mailMsg}</span>}
+            {mailMsg && <span className={mailMsg.startsWith('⚠️') ? 'msg-error' : 'msg-success'}>{mailMsg}</span>}
           </div>
         </div>
       )}
@@ -158,10 +175,12 @@ export function SettingsTab() {
           <input placeholder="company name" value={blockName} onChange={e => setBlockName(e.target.value)} />
           <button className="primary" onClick={addBlock}>Block</button>
         </div>
-        {blocklist.length > 0 && (
+        {loading ? (
+          <div className="loading-bar short" />
+        ) : blocklist.length > 0 && (
           <ul className="rules">
             {blocklist.map(b => <li key={b.id}>{b.normalized_name} <span className="muted small">({b.reason})</span>
-              <button className="link" onClick={() => removeBlock(b.id)}>×</button></li>)}
+              <button className="link" aria-label={`Remove ${b.normalized_name} from blocklist`} onClick={() => removeBlock(b.id, b.normalized_name)}>×</button></li>)}
           </ul>
         )}
       </div>

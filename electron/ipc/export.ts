@@ -4,7 +4,10 @@ import * as path from 'path';
 import { getDb } from './db';
 
 const csvCell = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+const esc = (s: any) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+// Job URLs come from scraped/external sources — only ever link http(s).
+const safeHref = (u: any) => /^https?:\/\//i.test(String(u ?? '')) ? esc(u) : '';
 
 /** Export the pipeline (jobs ⨝ applications) to CSV + a styled HTML report. */
 export function registerExportHandlers() {
@@ -28,7 +31,7 @@ export function registerExportHandlers() {
       <h1>Job Finder — pipeline (${rows.length})</h1><p>${new Date().toLocaleString()}</p><table>
       <tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>
       ${rows.map(r => `<tr>${cols.map(c =>
-        c === 'url' ? `<td><a href="${esc(r.url)}">link</a></td>`
+        c === 'url' ? `<td>${safeHref(r.url) ? `<a href="${safeHref(r.url)}">link</a>` : ''}</td>`
         : c === 'submitted_at' ? `<td>${r[c] ? new Date(r[c]).toLocaleDateString() : ''}</td>`
         : `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}
       </table>`;
