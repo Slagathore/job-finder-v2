@@ -19,6 +19,7 @@
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "dist": "npm run build && electron-builder --win nsis portable --publish never",
     "dist:portable": "npm run build && electron-builder --win portable --publish never",
+    "dist:signed": "npm run build && electron-builder --win nsis portable --publish never -c.win.azureSignOptions.publisherName=\"Charles Chambers\" -c.win.azureSignOptions.endpoint=https://cus.codesigning.azure.net/ -c.win.azureSignOptions.codeSigningAccountName=Slagathores-Apps -c.win.azureSignOptions.certificateProfileName=public",
     "ext:pack": "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force dist-installer | Out-Null; Compress-Archive -Path extension/* -DestinationPath dist-installer/job-finder-extension.zip -Force; Write-Output 'dist-installer/job-finder-extension.zip'\"",
     "postinstall": "electron-builder install-app-deps || echo skipped"
   },
@@ -39,7 +40,7 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^31.7.7",
-    "electron-builder": "^24.13.3",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.5.4",
     "vite": "^5.4.0",
     "vitest": "^2.0.5",
@@ -75,7 +76,12 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
+      }
     },
     "nsis": {
       "oneClick": false,
