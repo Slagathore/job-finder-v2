@@ -181,6 +181,23 @@ export function SettingsTab() {
       )}
 
       <div className="profile-card" style={{ marginTop: 18 }}>
+        <h2>Updates</h2>
+        <p className="muted small">
+          On launch the app checks GitHub for a newer version.{' '}
+          {s.updateSilence === 'forever' ? 'Notifications are currently silenced forever.'
+            : s.updateSilence ? 'Notifications are silenced until the next update is pushed.'
+            : 'Notifications are on.'}
+          {' '}Critical (emergency) updates always notify regardless.
+        </p>
+        {!!s.updateSilence && (
+          <button className="primary" onClick={async () => {
+            await window.api.update.silence('clear');
+            setS(p => ({ ...p, updateSilence: '' }));
+          }}>Re-enable update notifications</button>
+        )}
+      </div>
+
+      <div className="profile-card" style={{ marginTop: 18 }}>
         <h2>Company blocklist</h2>
         <p className="muted small">The hard apply gate — these companies are never applied to (matching is normalized).</p>
         <div className="addform">

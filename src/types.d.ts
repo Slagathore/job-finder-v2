@@ -156,6 +156,13 @@ export interface Api {
     reject: (id: number) => Promise<{ ok: boolean }>;
     rollback: (id: number) => Promise<{ ok: boolean; error?: string }>;
   };
+  update: {
+    check: () => Promise<{
+      available: boolean; latestSha: string; summary: string;
+      emergency: boolean; emergencyMessage: string; repoUrl: string;
+    } | null>;
+    silence: (mode: 'until-next' | 'forever' | 'clear') => Promise<boolean>;
+  };
   app: {
     version: () => Promise<string>;
     hubInfo: () => Promise<{ port: number; token: string; url: string }>;

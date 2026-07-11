@@ -1,0 +1,5 @@
+{
+  "_doc": "Update beacon. The app fetches this file raw from the main branch on every launch. Normally leave emergency=false — users get a regular update banner they can silence. Flip emergency to true and write a message ONLY for critical releases (security fix, data-loss bug, a board change that breaks harvesting): the message is shown urgently on every launch, overriding any user silence setting, until they update.",
+  "emergency": false,
+  "message": ""
+}

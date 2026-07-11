@@ -89,6 +89,9 @@ export const DEFAULTS = {
   pruneAfterDays: 90,        // auto-remove UNTOUCHED 'discovered' jobs older than this; 0 = off
   notifKeep: 500,            // cap on the notifications log
 
+  // ── Update notifications ────────────────────────────────────────────
+  updateSilence: '',         // '' = notify | 'until:<sha>' | 'forever' (emergencies override)
+
   // ── Browser-extension ingress (§5.1 / phase 6) ──────────────────────
   hubPort: 17893,
   hubToken: '',            // generated on first boot if empty

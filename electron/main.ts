@@ -33,6 +33,7 @@ import { getDb, closeDb } from './ipc/db';
 import { killAllChildren } from './selfext/exec';
 import { randomUUID } from 'crypto';
 import { runScan } from './scan/runner';
+import { checkForUpdates, silenceUpdates } from './update/check';
 import { runEmbeddings, discover } from './discovery/service';
 import { discoverBoardsFromJobs } from './boards/autodiscover';
 import { collapseAggregatorDupes } from './maintenance/dedupe';
@@ -317,6 +318,8 @@ function registerAppHandlers() {
     const r = await dialog.showOpenDialog(mainWindow ?? undefined as any, opts);
     return r.canceled ? null : r.filePaths[0];
   });
+  ipcMain.handle('update:check', () => checkForUpdates());
+  ipcMain.handle('update:silence', (_e, mode: 'until-next' | 'forever' | 'clear') => silenceUpdates(mode));
 }
 
 // Crash safety net: log instead of dying silently. Boot failures get a visible

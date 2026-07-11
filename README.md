@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue.svg)
-![Tests](https://img.shields.io/badge/tests-130%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-135%20passing-brightgreen.svg)
 ![Electron](https://img.shields.io/badge/Electron-React%20%2B%20TypeScript-9feaf9.svg)
 
 ![Dashboard](store/screenshot-1-dashboard.png)
@@ -62,7 +62,7 @@ There is no server. The app's own docs, database, backups, and exports all live 
 
 ## Architecture
 
-Electron + React + TypeScript + Vite, `better-sqlite3` for storage, provider-agnostic LLM layer (`electron/llm/provider.ts`), Vitest (130 tests). The full design doc — including the self-extension sandbox, permission matrix, and per-phase build history — is in **[PLAN.md](PLAN.md)**.
+Electron + React + TypeScript + Vite, `better-sqlite3` for storage, provider-agnostic LLM layer (`electron/llm/provider.ts`), Vitest (135 tests). The full design doc — including the self-extension sandbox, permission matrix, and per-phase build history — is in **[PLAN.md](PLAN.md)**.
 
 ## Contributing
 

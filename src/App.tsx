@@ -32,9 +32,18 @@ const TABS: { id: TabId; label: string; phase?: string }[] = [
 export default function App() {
   const [tab, setTab] = useState<TabId>('dashboard');
   const [version, setVersion] = useState('');
+  const [update, setUpdate] = useState<Awaited<ReturnType<typeof window.api.update.check>>>(null);
   const lastCelebrated = useRef<number>(-1);
 
   useEffect(() => { window.api.app.version().then(setVersion); }, []);
+
+  // On-load update scan. Emergencies come back even when silenced.
+  useEffect(() => { window.api.update.check().then(setUpdate).catch(() => {}); }, []);
+
+  const silence = (mode: 'until-next' | 'forever') => {
+    window.api.update.silence(mode).catch(() => {});
+    setUpdate(null);
+  };
 
   // Tray items and desktop-notification clicks deep-link into a tab.
   useEffect(() => window.api.app.onOpenTab(t => setTab(t as TabId)), []);
@@ -88,6 +97,28 @@ export default function App() {
       </aside>
 
       <main className="content">
+        {update && (
+          <div className={`update-banner ${update.emergency ? 'urgent' : ''}`}>
+            <span className="update-text">
+              {update.emergency
+                ? <><strong>⚠ Critical update:</strong> {update.emergencyMessage}</>
+                : <><strong>Update available</strong> — {update.summary}</>}
+            </span>
+            <span className="update-actions">
+              <button className="update-get" onClick={() => window.api.app.openExternal(update.repoUrl)}>
+                Get update
+              </button>
+              {!update.emergency && (
+                <>
+                  <button onClick={() => silence('until-next')}>Silence until next update</button>
+                  <button onClick={() => silence('forever')}>Don't show again</button>
+                </>
+              )}
+              <button title={update.emergency ? 'Hide for this session (shows again next launch)' : 'Hide for now'}
+                onClick={() => setUpdate(null)}>✕</button>
+            </span>
+          </div>
+        )}
         <ErrorBoundary>
           {tab === 'dashboard' && <Dashboard />}
           {tab === 'settings' && <SettingsTab />}

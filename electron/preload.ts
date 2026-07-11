@@ -139,6 +139,10 @@ contextBridge.exposeInMainWorld('api', {
     reject: (id: number) => invoke('selfext:reject', id),
     rollback: (id: number) => invoke('selfext:rollback', id),
   },
+  update: {
+    check: () => invoke('update:check'),
+    silence: (mode: 'until-next' | 'forever' | 'clear') => invoke('update:silence', mode),
+  },
   app: {
     version: () => invoke('app:version'),
     hubInfo: () => invoke('app:hubInfo'),

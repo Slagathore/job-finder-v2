@@ -12,7 +12,7 @@
     "dev:electron": "wait-on tcp:5177 && tsc -p electron/tsconfig.json && electron .",
     "build:renderer": "vite build",
     "build:electron": "tsc -p electron/tsconfig.json",
-    "build": "npm run build:renderer && npm run build:electron",
+    "build": "npm run build:renderer && npm run build:electron && node scripts/write-buildinfo.mjs",
     "start": "npm run build && cross-env JF_PROD=1 electron .",
     "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run",
     "test:watch": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs",
