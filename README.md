@@ -2,10 +2,13 @@
 
 **A free, local-first job search command center.** Scan job boards, discover roles that actually fit your experience, tailor applications, and track everything in a kanban pipeline — all in a desktop app where **your data never leaves your machine**.
 
+[![Download](https://img.shields.io/github/v/release/Slagathore/job-finder-v2?label=download&color=5b8cff)](https://github.com/Slagathore/job-finder-v2/releases/latest)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue.svg)
-![Tests](https://img.shields.io/badge/tests-144%20passing-brightgreen.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg)
+![Tests](https://img.shields.io/badge/tests-148%20passing-brightgreen.svg)
 ![Electron](https://img.shields.io/badge/Electron-React%20%2B%20TypeScript-9feaf9.svg)
+
+### ⬇️ [**Download the latest release**](https://github.com/Slagathore/job-finder-v2/releases/latest) — Windows (signed), macOS, or Linux
 
 ![Dashboard](store/screenshot-1-dashboard.png)
 
@@ -32,27 +35,50 @@ No account. No cloud. No telemetry. Your resume, applications, and search histor
 
 ![Pipeline](store/screenshot-2-pipeline.png)
 
-## Quick start
+## Install
+
+Grab a build from the [**latest release**](https://github.com/Slagathore/job-finder-v2/releases/latest):
+
+| Platform | File | Notes |
+|---|---|---|
+| **Windows** | `JobFinder-*-Setup.exe` (installer) or `-portable.exe` | **Code-signed.** Recommended — this is the battle-tested platform. |
+| **macOS** | `.dmg` or `.zip` (Intel + Apple Silicon) | Unsigned — first launch needs right-click → **Open** (see below). |
+| **Linux** | `.AppImage` or `.deb` | Install a keyring (`gnome-keyring`/`libsecret`) if you'll use Gmail or an API key. |
+
+A first-run wizard asks for your name/email, your AI backend, and whether to keep the bundled starter boards. Then hit **Scan ATS boards now** and real jobs land in the database — no AI or account required.
+
+<details>
+<summary><b>macOS: "Job Finder is damaged and can't be opened"</b></summary>
+
+The Mac build isn't notarized (Apple charges $99/yr for that), so Gatekeeper blocks it. It isn't damaged. Either:
+- Right-click the app → **Open** → **Open**, or
+- `xattr -dr com.apple.quarantine "/Applications/Job Finder.app"`
+</details>
+
+**AI backend (optional, pick one):**
+- [Ollama](https://ollama.com) running locally — plus `ollama pull nomic-embed-text` for semantic search. Free and fully local.
+- Or an Anthropic API key in **Settings**.
+
+The app works without either — scanning, harvesting, and the pipeline are plain code; AI powers matching, digesting, and tailoring.
+
+## Build from source
 
 ```bash
 git clone https://github.com/Slagathore/job-finder-v2.git
 cd job-finder-v2
 npm install
 npm run dev      # development (Vite on 5177 + Electron)
-npm run dist     # or: build a Windows installer → dist-installer/
+npm test         # 148 tests
+npm run dist     # package for your platform → dist-installer/
 ```
 
-**AI backend (pick one):**
-- [Ollama](https://ollama.com) running locally — plus `ollama pull nomic-embed-text` for semantic search. Free and fully local.
-- Or an Anthropic API key in **Settings** to use the cloud fallback chain.
-
-The app works without either — scanning, harvesting, and the pipeline are plain code; AI powers matching, digesting, and tailoring.
+Windows release builds are code-signed via Azure Artifact Signing — see [SIGNING.md](SIGNING.md). `npm run dist` produces an unsigned build and needs no credentials.
 
 ## The browser extension
 
 Some boards can't be scanned politely from outside the browser. The extension harvests what *you're already looking at*:
 
-1. Build the zip: `npm run ext:pack` (or load `extension/` unpacked via `chrome://extensions` → Developer mode).
+1. Load it: `chrome://extensions` → **Developer mode** → **Load unpacked** → select the `extension/` folder. *(A Chrome Web Store listing is in review — this step gets easier soon.)*
 2. In the app: **Settings → Browser extension pairing** — copy the hub token.
 3. Click the extension icon, paste the token, **Test** → ✓.
 4. Browse Indeed/LinkedIn/etc. and click **Harvest** (or enable auto-harvest).
@@ -61,15 +87,19 @@ Everything it collects goes to your local app over `127.0.0.1` — see [its priv
 
 ## Privacy, in one paragraph
 
-There is no server. The app's own docs, database, backups, and exports all live in your user data folder. The extension ships listings to localhost. Gmail access (if you opt in) uses your own OAuth credentials and only labels/reads application-related threads. The agent's riskier capabilities (sending email, applying) are permission-gated per capability, individually, in Settings — and bulk apply is additionally gated by a blocklist and listing-liveness checks.
+There is no server. The app's own docs, database, backups, and exports all live in your user data folder. The extension ships listings to localhost. Gmail access (if you opt in) uses your own OAuth credentials and only labels/reads application-related threads. API keys and OAuth tokens are encrypted at rest with your OS keychain — and if no keychain is available, the app **refuses** to store them rather than writing them to disk in cleartext. The agent's riskier capabilities (sending email, applying) are permission-gated per capability, individually, in Settings — and bulk apply is additionally gated by a blocklist and listing-liveness checks.
 
 ## Architecture
 
-Electron + React + TypeScript + Vite, `better-sqlite3` for storage, provider-agnostic LLM layer (`electron/llm/provider.ts`), Vitest (144 tests). The full design doc — including the self-extension sandbox, permission matrix, and per-phase build history — is in **[PLAN.md](PLAN.md)**.
+Electron + React + TypeScript + Vite, `better-sqlite3` for storage, provider-agnostic LLM layer (`electron/llm/provider.ts`), Vitest (148 tests). The full design doc — including the self-extension sandbox, permission matrix, and per-phase build history — is in **[PLAN.md](PLAN.md)**.
+
+## Platform status
+
+Windows is the platform this was built and daily-driven on. The macOS and Linux builds compile, package, and pass the full test suite on their native CI runners — but they haven't had real-world mileage yet. If you hit something on either, [open an issue](https://github.com/Slagathore/job-finder-v2/issues); that feedback is genuinely the fastest way to get them solid.
 
 ## Contributing
 
-Issues and PRs welcome. Good first contributions: new board scrapers (`extension/content/`), new ATS integrations (`electron/scan/`), and non-Windows platform testing (it's Electron, so macOS/Linux should mostly work — it just hasn't been battle-tested there yet).
+Issues and PRs welcome. Good first contributions: new board scrapers (`extension/content/`), new ATS integrations (`electron/scan/`), and macOS/Linux bug reports. Known gaps and planned work live in [TODO.md](TODO.md).
 
 ## Support
 
