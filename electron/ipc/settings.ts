@@ -75,19 +75,19 @@ export function migrateSecrets(): void {
 
 /**
  * App settings with defaults. LLM defaults follow PLAN.md §5.4: Ollama Cloud
- * gemini-3-flash-preview:cloud through the OpenAI-compatible /v1 path, with an
+ * kimi-k2.7-code:cloud through the native Ollama API (/api/chat), with an
  * Anthropic → local-model fallback chain.
  */
 export const DEFAULTS = {
   // ── LLM provider (§5.4) ─────────────────────────────────────────────
   ollamaBaseUrl: 'http://127.0.0.1:11434',
-  openaiCompatUrl: 'http://127.0.0.1:11434/v1',
-  openaiCompatKey: 'ollama',
-  primaryModel: 'gemini-3-flash-preview:cloud',
+  primaryModel: 'kimi-k2.7-code:cloud',
   fallbackLocalModel: 'llama3.2',
   anthropicApiKey: '',
   anthropicModel: 'claude-sonnet-4-6',
   embeddingModel: 'nomic-embed-text',
+  think: false as boolean | 'low' | 'medium' | 'high',  // reasoning pass — off by default
+  showThinking: false,   // surface message.thinking in results — never mixed into answers
 
   // ── App behaviour ───────────────────────────────────────────────────
   theme: 'dark',

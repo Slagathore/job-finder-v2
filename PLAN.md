@@ -51,7 +51,7 @@ conversational agent that can drive and extend the whole app.
 | Profile model | **Experience line-item library** (digested from many resumes + Q&A) → derived profile + **inferred role/industry fits**. Not a single static CV. |
 | Discovery ranking | Semantic match over full qualifications; **default weights: pay + WFH high**; surfaces unexpected cross-industry fits. |
 | Extension target | **Chromium** (Chrome + Opera + Edge) — single MV3 build |
-| LLM provider | Provider-agnostic. **Default Ollama Cloud `gemini-3-flash-preview:cloud` via OpenAI `/v1`** (§5.4). |
+| LLM provider | Provider-agnostic. **Default Ollama Cloud `kimi-k2.7-code:cloud` via the native Ollama API** (§5.4). |
 | LLM fallback chain | Ollama cloud → **Anthropic API (if key set)** → **smaller local/other Ollama model**. Health-warning banner on any fallback. |
 | Embeddings | Local embedding model via Ollama; vectors in SQLite (sqlite-vec or cosine over stored blobs). |
 | Fit score | **Visible, informational only — gates NOTHING** |
@@ -76,7 +76,7 @@ Open / still to refine: see §11.
 | Electron + React + TS + Vite + Node main + `better-sqlite3` scaffold | App shell, IPC, persistence, history, settings, Ollama health badge, tray-able | **Fork as the skeleton.** |
 | `src/lib/planner.ts` | Plan-and-execute agent: typed JSON step registry, parse/validate/repair, `openTab`, destructive-gating | **Port → agent console (§6.12).** Extend registry. |
 | `electron/selfUpgrade/*` + `electron/lib/scanner.ts` | Self-coding: inventory → LLM PatchSet → temp-dir sandbox + isolated test run → scan → backup/rollback + hash-chained audit | **Port → self-extension (§6.15).** |
-| OpenAI-compat + Ollama backends | LLM transport matching §5.4 | **Reuse pattern.** |
+| Ollama backends | LLM transport matching §5.4 (native API) | **Reuse pattern.** |
 
 ### 3b. From `../career-ops` (job-search domain logic)
 | Piece | Role | v2 plan |
@@ -129,8 +129,8 @@ HOSTILE   (Indeed, CareerBuilder, LinkedIn)→ BROWSER EXTENSION in Cole's real 
 │  • Gmail ingestor → status updates                            │
 │  • Agent console + self-extension sandbox                     │
 └──▲────────────▲───────────────────────────────▲─────────────┘
-   │ localhost   │ tool/plan steps (openTab=push)│ /v1 chat + embeddings
-   │ fetch/SSE   │                               │ (OpenAI-compat, tool-safe)
+   │ localhost   │ tool/plan steps (openTab=push)│ /api chat + embeddings
+   │ fetch/SSE   │                               │ (native Ollama API)
 ┌──┴──────────┐  │   ┌──────────────────────────┴───────────────┐
 │ BROWSER     │◄─┼──►│ AGENTIC LAYER                             │
 │ EXTENSION   │  │   │ • Digest resumes/Q&A → line items         │
@@ -161,13 +161,14 @@ Ports `modes/*.md`; fast model for bulk scoring, capable model for deep work;
 local embeddings for semantic match. In concert with the extension via SQLite.
 
 ### 5.4 LLM provider abstraction
-Default **Ollama Cloud `gemini-3-flash-preview:cloud` via OpenAI `/v1`**
-(`POST {base}/v1/chat/completions`, base `http://127.0.0.1:11434`, auth
-`Bearer ollama`; Node `openai` SDK `baseURL:'…/v1'`, `apiKey:'ollama'`).
-**Tool calls** use `/v1` and round-trip assistant turns verbatim
-(thought_signature; Ollama #14567). **Fallback chain:** Ollama cloud → Anthropic
-(if key) → smaller local/other Ollama model; health-warning on fallback. Refs:
-`Ai_ccountabilibuddy/modules/brain/openai_compat.py`, `DungeonMaster/.../llm_ollama_openai_compat.py`, claw-deck reflector backends.
+Default **Ollama Cloud `kimi-k2.7-code:cloud` via the native Ollama API**
+(`ollama` npm client → `POST {base}/api/chat`, base `http://127.0.0.1:11434`).
+The old OpenAI-compat `/v1` route was removed in the 2026-07 model migration.
+**Thinking** is configurable (`think`: off/on/low/medium/high, default off)
+with a separate `showThinking` toggle (default off): the native API returns
+`message.thinking` apart from `message.content`, so reasoning is never mixed
+into displayed or stored answers. **Fallback chain:** Ollama cloud → Anthropic
+(if key) → smaller local/other Ollama model; health-warning on fallback.
 
 ---
 
@@ -477,7 +478,7 @@ blocks continued building — but the features won't *work end-to-end* until don
 
 **To make the app actually run / use LLM features (any time):**
 - [ ] **Install Ollama** and run it (`ollama serve`). The app defaults to it.
-- [ ] **Sign in to Ollama** for cloud models so `gemini-3-flash-preview:cloud`
+- [ ] **Sign in to Ollama** for cloud models so `kimi-k2.7-code:cloud`
       works (`ollama signin`), OR set an **Anthropic API key** in Settings as fallback.
 - [ ] **Pull the embedding model:** `ollama pull nomic-embed-text` (needed for
       semantic search / discovery in phase 4).

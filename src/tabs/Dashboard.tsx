@@ -207,7 +207,7 @@ export function Dashboard() {
       )}
 
       <h2>LLM smoke test</h2>
-      <p className="muted small">Verifies the provider chain (Ollama Cloud /v1 → Anthropic → local).</p>
+      <p className="muted small">Verifies the provider chain (Ollama Cloud native API → Anthropic → local).</p>
       <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={3} />
       <div className="row">
         <button className="primary" onClick={runLlm} disabled={busy}>{busy ? 'Running…' : 'Run'}</button>

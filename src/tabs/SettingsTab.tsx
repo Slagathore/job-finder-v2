@@ -7,10 +7,8 @@ const FIELDS: { key: string; label: string; type?: string; hint?: string }[] = [
   { key: 'candidatePhone', label: 'Your phone' },
   { key: 'candidateLocation', label: 'Your location' },
   { key: 'candidateLinks', label: 'Your links', hint: 'e.g. github.com/you, linkedin.com/in/you' },
-  { key: 'ollamaBaseUrl', label: 'Ollama base URL', hint: 'Native API (health, embeddings, local models)' },
-  { key: 'openaiCompatUrl', label: 'OpenAI-compat URL', hint: 'Usually <ollama>/v1 — used for chat + tool calls' },
-  { key: 'openaiCompatKey', label: 'OpenAI-compat key', hint: 'Any non-empty value for local Ollama ("ollama")' },
-  { key: 'primaryModel', label: 'Primary model', hint: 'Default: gemini-3-flash-preview:cloud' },
+  { key: 'ollamaBaseUrl', label: 'Ollama base URL', hint: 'Native API — chat, health, embeddings, local models' },
+  { key: 'primaryModel', label: 'Primary model', hint: 'Default: kimi-k2.7-code:cloud' },
   { key: 'fallbackLocalModel', label: 'Local fallback model', hint: 'Used if cloud + Anthropic both fail' },
   { key: 'anthropicApiKey', label: 'Anthropic API key', type: 'password', hint: 'Optional — enables Anthropic fallback' },
   { key: 'anthropicModel', label: 'Anthropic model' },
@@ -144,6 +142,33 @@ export function SettingsTab() {
       <div className="row">
         <button className="primary" onClick={save} disabled={loading}>Save</button>
         {saved && <span className="msg-success">Saved ✓</span>}
+      </div>
+
+      <div className="profile-card" style={{ marginTop: 18 }}>
+        <h2>Thinking</h2>
+        <label className="field">
+          <span className="field-l">Thinking effort</span>
+          <select
+            value={s.think === true ? 'on' : s.think || 'off'}
+            onChange={async e => {
+              const v = e.target.value;
+              const think = v === 'off' ? false : v === 'on' ? true : v;
+              setS(p => ({ ...p, think }));
+              await window.api.settings.set({ think });
+            }}>
+            <option value="off">off</option>
+            <option value="on">on</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+          <span className="field-h">Reasoning pass for the primary model (kimi-k2.7-code supports it). Off by default.</span>
+        </label>
+        <label className="modechk">
+          <input type="checkbox" checked={!!s.showThinking}
+            onChange={async e => { const v = e.target.checked; setS(p => ({ ...p, showThinking: v })); await window.api.settings.set({ showThinking: v }); }} />
+          Surface the model&apos;s thinking alongside answers (it is never mixed into the answer text)
+        </label>
       </div>
 
       <div className="profile-card" style={{ marginTop: 18 }}>

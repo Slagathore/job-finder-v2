@@ -1,20 +1,24 @@
 /**
  * LLM provider abstraction with fallback chain (PLAN.md §5.4).
  *
- *   1. Ollama Cloud `gemini-3-flash-preview:cloud` via OpenAI-compatible /v1
+ *   1. Ollama Cloud `kimi-k2.7-code:cloud` via the native Ollama API (/api/chat)
  *   2. Anthropic API (only if an API key is set)
- *   3. A smaller local Ollama model via the same /v1 endpoint
+ *   3. A smaller local Ollama model via the same native endpoint
  *
- * The OpenAI-compatible `/v1/chat/completions` path is REQUIRED for the cloud
- * Gemini-3 model: the native /api path drops Gemini-3's `thought_signature` on
- * tool-call round-trips (Ollama #14567). Tool-calling support will round-trip
- * assistant turns verbatim when added; this phase is text-first.
+ * Chat goes through the official `ollama` npm client (the OpenAI-compat /v1
+ * route is gone — 2026-07 model migration). kimi-k2.7 supports the `think`
+ * parameter; the native API returns `message.thinking` separately from
+ * `message.content`, so reasoning never leaks into stored/displayed output.
  */
+import { Ollama } from 'ollama';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
+
+/** Thinking effort: off, on, or an explicit level (model support required). */
+export type ThinkSetting = boolean | 'low' | 'medium' | 'high';
 
 export interface GenerateOpts {
   temperature?: number;
@@ -24,14 +28,15 @@ export interface GenerateOpts {
 
 export interface ProviderDescriptor {
   name: string;            // human label for logs / health
-  kind: 'openai-compat' | 'anthropic';
+  kind: 'ollama' | 'anthropic';
   baseUrl: string;
-  apiKey: string;
+  apiKey: string;          // anthropic only; '' for ollama (local daemon needs none)
   model: string;
 }
 
 export interface GenerateResult {
   text: string;
+  thinking?: string;       // only set when showThinking is enabled — never merged into text
   provider: string;
   model: string;
   usedFallback: boolean;
@@ -39,14 +44,14 @@ export interface GenerateResult {
 }
 
 interface SettingsLike {
-  openaiCompatUrl: string;
-  openaiCompatKey: string;
   primaryModel: string;
   fallbackLocalModel: string;
   anthropicApiKey: string;
   anthropicModel: string;
   ollamaBaseUrl: string;
   embeddingModel: string;
+  think?: ThinkSetting;    // default false — no reasoning pass
+  showThinking?: boolean;  // default false — drop message.thinking entirely
 }
 
 /**
@@ -57,10 +62,10 @@ export function providerChain(s: SettingsLike, modelOverride?: string): Provider
   const chain: ProviderDescriptor[] = [];
 
   chain.push({
-    name: 'ollama-cloud (openai /v1)',
-    kind: 'openai-compat',
-    baseUrl: s.openaiCompatUrl,
-    apiKey: s.openaiCompatKey || 'ollama',
+    name: 'ollama-cloud (native /api)',
+    kind: 'ollama',
+    baseUrl: s.ollamaBaseUrl,
+    apiKey: '',
     model: modelOverride || s.primaryModel,
   });
 
@@ -74,15 +79,15 @@ export function providerChain(s: SettingsLike, modelOverride?: string): Provider
     });
   }
 
-  // Local fallback model on the same OpenAI-compat surface, only if it differs
+  // Local fallback model on the same native Ollama surface, only if it differs
   // from the primary (otherwise it's a pointless retry of the same thing).
   const localModel = s.fallbackLocalModel;
   if (localModel && localModel !== (modelOverride || s.primaryModel)) {
     chain.push({
       name: `ollama-local (${localModel})`,
-      kind: 'openai-compat',
-      baseUrl: s.openaiCompatUrl,
-      apiKey: s.openaiCompatKey || 'ollama',
+      kind: 'ollama',
+      baseUrl: s.ollamaBaseUrl,
+      apiKey: '',
       model: localModel,
     });
   }
@@ -90,30 +95,25 @@ export function providerChain(s: SettingsLike, modelOverride?: string): Provider
   return chain;
 }
 
-async function chatOpenAICompat(
-  p: ProviderDescriptor, messages: ChatMessage[], opts: GenerateOpts
-): Promise<string> {
-  const url = `${p.baseUrl.replace(/\/$/, '')}/chat/completions`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${p.apiKey}` },
-    body: JSON.stringify({
-      model: p.model,
-      messages,
-      temperature: opts.temperature ?? 0.4,
-      max_tokens: opts.maxTokens ?? 2048,
-    }),
+async function chatOllama(
+  p: ProviderDescriptor, messages: ChatMessage[], opts: GenerateOpts, think?: ThinkSetting
+): Promise<{ content: string; thinking?: string }> {
+  const client = new Ollama({
+    host: p.baseUrl,
     // A hung model server must not freeze the scan→embed→discover chain forever.
-    signal: AbortSignal.timeout(120_000),
+    fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(120_000) }),
   });
-  if (!res.ok) throw new Error(`openai-compat HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const j: any = await res.json();
-  const msg = j?.choices?.[0]?.message;
-  const content = msg?.content;
-  if (typeof content === 'string' && content.trim()) return content;
-  // Gemini-3 thinking-mode fallback: surface reasoning over an empty answer.
-  if (typeof msg?.reasoning === 'string' && msg.reasoning.trim()) return msg.reasoning;
-  return content ?? '';
+  const res = await client.chat({
+    model: p.model,
+    messages,
+    // Omit `think` when off — non-thinking fallback models reject the flag.
+    ...(think ? { think } : {}),
+    options: {
+      temperature: opts.temperature ?? 0.4,
+      num_predict: opts.maxTokens ?? 2048,
+    },
+  });
+  return { content: res.message?.content ?? '', thinking: res.message?.thinking };
 }
 
 async function chatAnthropic(
@@ -154,10 +154,17 @@ export async function generate(
   for (let i = 0; i < chain.length; i++) {
     const p = chain[i];
     try {
-      const text = p.kind === 'anthropic'
-        ? await chatAnthropic(p, messages, opts)
-        : await chatOpenAICompat(p, messages, opts);
-      return { text, provider: p.name, model: p.model, usedFallback: i > 0, errors };
+      if (p.kind === 'anthropic') {
+        const text = await chatAnthropic(p, messages, opts);
+        return { text, provider: p.name, model: p.model, usedFallback: i > 0, errors };
+      }
+      const r = await chatOllama(p, messages, opts, s.think);
+      return {
+        text: r.content,
+        // Reasoning is surfaced separately, and only when explicitly enabled.
+        ...(s.showThinking && r.thinking ? { thinking: r.thinking } : {}),
+        provider: p.name, model: p.model, usedFallback: i > 0, errors,
+      };
     } catch (e: any) {
       errors.push({ provider: p.name, error: e?.message ?? String(e) });
     }

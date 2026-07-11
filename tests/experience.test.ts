@@ -4,10 +4,10 @@ import { parseLineItems, digestSource } from '../electron/experience/digest';
 import { parseProfileResult, parseQuestions } from '../electron/experience/profile';
 
 const settings: any = {
-  openaiCompatUrl: 'http://127.0.0.1:11434/v1', openaiCompatKey: 'ollama',
-  primaryModel: 'gemini-3-flash-preview:cloud', fallbackLocalModel: 'llama3.2',
+  primaryModel: 'kimi-k2.7-code:cloud', fallbackLocalModel: 'llama3.2',
   anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-6',
   ollamaBaseUrl: 'http://127.0.0.1:11434', embeddingModel: 'nomic-embed-text',
+  think: false, showThinking: false,
 };
 
 describe('parseJsonLoose', () => {
@@ -90,7 +90,7 @@ describe('digestSource (mocked LLM)', () => {
   it('digests text into line items via the provider chain', async () => {
     const content = JSON.stringify([{ kind: 'accomplishment', text: 'Cut latency 40%', employer: 'Acme' }]);
     vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true, json: async () => ({ choices: [{ message: { content } }] }),
+      ok: true, json: async () => ({ message: { role: 'assistant', content } }),
     } as any)));
     const items = await digestSource(settings, 'resume text', 'file:cv.pdf');
     expect(items).toHaveLength(1);
