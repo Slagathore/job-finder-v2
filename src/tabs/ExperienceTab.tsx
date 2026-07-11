@@ -14,6 +14,9 @@ export function ExperienceTab() {
   const [ruleScope, setRuleScope] = useState('resume');
   const [llmDown, setLlmDown] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [stories, setStories] = useState<any[]>([]);
+  const [storyPrompt, setStoryPrompt] = useState('');
+  const [storyText, setStoryText] = useState('');
 
   async function refresh() {
     try {
@@ -21,11 +24,24 @@ export function ExperienceTab() {
       const p = await window.api.experience.getProfile();
       setProfile(p.profile); setRoleFits(p.roleFits ?? []);
       setRules(await window.api.rules.list());
+      setStories(await window.api.stories.list());
       const h = await window.api.llm.health();
       setLlmDown(!(h.ollamaUp || h.anthropicConfigured));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function addStoryManual() {
+    if (!storyPrompt.trim() || !storyText.trim()) { toast('Both the question and the story are required', 'error'); return; }
+    const r = await window.api.stories.add(storyPrompt.trim(), storyText.trim());
+    if (r?.error) { toast(r.error, 'error'); return; }
+    setStoryPrompt(''); setStoryText('');
+    setStories(await window.api.stories.list());
+  }
+  async function delStory(id: number) {
+    await window.api.stories.delete(id);
+    setStories(await window.api.stories.list());
   }
   const NEED_AI = 'No line items created — the AI isn’t connected. Start Ollama (and `ollama pull nomic-embed-text`) or set an Anthropic key in Settings.';
   useEffect(() => { refresh(); }, []);
@@ -159,6 +175,26 @@ export function ExperienceTab() {
             {rules.map(r => (
               <li key={r.id}><span className="chip">{r.scope}</span> {r.text}
                 <button className="link" aria-label={`Remove rule: ${r.text}`} onClick={() => delRule(r.id)}>×</button></li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="profile-card" style={{ marginTop: 12 }}>
+        <h2>Story bank</h2>
+        <p className="muted small">Your reusable STAR interview stories. Interview prep saves its generated stories here and reuses them for future jobs — refine the good ones, delete the weak ones.</p>
+        <div className="addform">
+          <input placeholder="behavioral question (e.g. tell me about a time you handled conflict)" value={storyPrompt} onChange={e => setStoryPrompt(e.target.value)} />
+          <button className="primary" onClick={addStoryManual}>Add</button>
+        </div>
+        <textarea placeholder="the story — situation, task, action, result" value={storyText} onChange={e => setStoryText(e.target.value)}
+          style={{ width: '100%', minHeight: 60, marginTop: 6 }} />
+        {stories.length > 0 && (
+          <ul className="rules">
+            {stories.map(s => (
+              <li key={s.id}><b>{s.prompt}</b><br /><span className="muted small">{s.story}</span>
+                {s.source_job && <span className="muted small"> · from prep</span>}
+                <button className="link" aria-label={`Delete story: ${s.prompt}`} onClick={() => delStory(s.id)}>×</button></li>
             ))}
           </ul>
         )}

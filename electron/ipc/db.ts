@@ -307,6 +307,32 @@ export function initDb() {
       source    TEXT,               -- areacode|nominatim|none
       cached_at INTEGER
     );
+
+    -- ── Contacts & outreach (ported from career-ops enrich/contacto) ───
+    CREATE TABLE IF NOT EXISTS contacts (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      company        TEXT NOT NULL,
+      name           TEXT,
+      title          TEXT,
+      kind           TEXT DEFAULT 'recruiter',   -- recruiter|hiring-manager|peer|interviewer|other
+      linkedin_url   TEXT,
+      notes          TEXT,
+      source         TEXT DEFAULT 'manual',      -- manual|discovered
+      created_at     INTEGER NOT NULL,
+      last_contacted INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_contacts_company ON contacts(company);
+
+    -- ── STAR story bank (ported from career-ops interview-prep) ────────
+    CREATE TABLE IF NOT EXISTS story_bank (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      prompt     TEXT NOT NULL,     -- the behavioral question it answers
+      story      TEXT NOT NULL,     -- STAR talking points
+      tags       TEXT,
+      source_job INTEGER,           -- job id it was generated for (null = manual)
+      created_at INTEGER NOT NULL,
+      last_used  INTEGER
+    );
   `);
 
   migrate('saved_searches', 'params', 'TEXT');

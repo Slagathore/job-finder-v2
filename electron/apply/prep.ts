@@ -5,6 +5,7 @@ import { generate } from '../llm/provider';
 import { getDb } from '../ipc/db';
 import { readSettings } from '../ipc/settings';
 import { buildPrepPrompt, parsePrep, type PrepDoc } from './prep-parse';
+import { listStories, saveGeneratedStories, touchStories } from '../career/stories';
 
 const slug = (s: string) => (s || 'job').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
@@ -28,9 +29,12 @@ export async function prepForJob(jobId: number): Promise<{ prep: PrepDoc; path: 
   const job = db.prepare('SELECT id, title, company, description FROM jobs WHERE id = ?').get(jobId) as any;
   if (!job) return { error: 'Job not found.' };
   const items = db.prepare('SELECT kind, text FROM experience_items LIMIT 40').all() as any[];
+  // Story bank: feed saved stories in for reuse, persist new ones after.
+  const bank = listStories().slice(0, 12);
   try {
-    const r = await generate(readSettings(), buildPrepPrompt(job, items), { temperature: 0.3, maxTokens: 1800 });
+    const r = await generate(readSettings(), buildPrepPrompt(job, items, bank), { temperature: 0.3, maxTokens: 1800 });
     const prep = parsePrep(r.text);
+    try { touchStories(bank.map(s => s.id)); saveGeneratedStories(jobId, prep.stories); } catch { /* bank is best-effort */ }
     const dir = path.join(app.getPath('userData'), 'output', `${jobId}-${slug(job.company)}-prep`);
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'interview-prep.html');

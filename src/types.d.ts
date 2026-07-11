@@ -156,6 +156,28 @@ export interface Api {
     reject: (id: number) => Promise<{ ok: boolean }>;
     rollback: (id: number) => Promise<{ ok: boolean; error?: string }>;
   };
+  career: {
+    insights: () => Promise<{
+      applied: number; responded: number; interviews: number; offers: number; rejected: number; pending: number;
+      byFit: any[]; byWorkMode: any[]; bySource: any[]; notes: string[];
+    }>;
+    doctor: () => Promise<{ name: string; ok: boolean; detail: string }[]>;
+    project: (idea: string) => Promise<{ eval: any } | { error: string }>;
+    training: (course: string) => Promise<{ eval: any } | { error: string }>;
+    deep: (company: string, role: string) => Promise<{ prompt: string } | { error: string }>;
+  };
+  stories: {
+    list: () => Promise<any[]>;
+    add: (prompt: string, story: string, tags?: string) => Promise<any | { error: string }>;
+    delete: (id: number) => Promise<boolean>;
+  };
+  contacts: {
+    list: (company?: string) => Promise<any[]>;
+    add: (c: any) => Promise<any | { error: string }>;
+    delete: (id: number) => Promise<boolean>;
+    discover: (company: string, role?: string) => Promise<{ added: any[]; found: number; captcha?: boolean } | { error: string }>;
+    outreach: (contactId: number, jobId?: number) => Promise<{ message: string; alternate: string } | { error: string }>;
+  };
   update: {
     check: () => Promise<{
       available: boolean; latestSha: string; summary: string;

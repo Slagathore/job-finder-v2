@@ -18,22 +18,16 @@ analyses; delete lines as they ship.
 - [ ] **Uninstall leaves `%APPDATA%\Job Finder` behind** — good data-safety default, but add an optional "also delete my data" checkbox (electron-builder `deleteAppDataOnUninstall` is all-or-nothing; a custom NSIS page can make it opt-in).
 - [ ] **Consider a real first-run wizard** — the Dashboard checklist is decent, but name/email + role targets + Ollama-vs-API-key in one guided pass would cut time-to-first-value.
 
-## Feature gaps vs career-ops (verified against both repos, 2026-07-10)
+## Feature gaps vs career-ops (verified 2026-07-10; high-value set ported 2026-07-10)
 
-Missing entirely:
-- [ ] **Outreach/contact pipeline** — career-ops tracks non-application contacts (recruiters, warm intros, investors) in a parallel pipeline (`dashboard/internal/*/investors.go`). v2 has no contact entity at all.
-- [ ] **Recruiter/hiring-manager discovery** — Google site-search finds LinkedIn profiles of recruiters at pipeline companies (`enrich.mjs` ~line 616), no LinkedIn auth needed. Pairs with:
-- [ ] **Cold-outreach message generator** — 3-sentence tailored outreach per contact type (`modes/contacto.md`). v2 generates cover letters only.
-- [ ] **Portfolio-project evaluator** — scores project ideas on 6 dimensions → BUILD/SKIP/PIVOT verdict with an 80/20 plan (`modes/project.md`).
-- [ ] **Gmail verification loop for automated signups** — polls inbox for account-verification emails and follows the link (`apply-engine/lib/gmail-verifier.mjs`). Only relevant if account creation (below) is ported.
+Ported ✔: rejection-pattern analytics (Career → Application insights), contacts entity +
+recruiter discovery + outreach generator (Career → Contacts & outreach), persistent STAR
+story bank (Experience tab + prep reuse), setup doctor (Settings → Diagnostics), portfolio
+project evaluator, course/cert evaluator, deep-research prompt generator (Career tab).
 
-Weaker in v2 than career-ops:
-- [ ] **Rejection-pattern / response-rate analytics** — response rates by archetype, seniority, remote/onsite, comp band (`analyze-patterns.mjs`); v2 only has the activity heatmap. All the data is already in SQLite — this is a high-value, low-effort port.
-- [ ] **Per-ATS apply adapters** — dedicated Greenhouse/Ashby/Lever/Workday/LinkedIn form-fill adapters + field mapper + dry-run report (`apply-engine/adapters/`); v2 has one generic label-matching autofill.
-- [ ] **Portal account creation + login handling** — password vault, login-wall/OAuth detection (`apply-engine/lib/account-creator.mjs`, `credentials.mjs`).
-- [ ] **LaTeX résumé output** — typeset .tex → PDF via tectonic (`generate-latex.mjs`); v2 renders HTML→PDF only.
-- [ ] **Persistent STAR story bank** — curated, reusable interview stories (`interview-prep/story-bank.md`); v2 regenerates stories per job and forgets them.
-- [ ] **Course/cert study-plan evaluator** — DO/DON'T verdict + weekly study plan for a user-named course (`modes/training.md`); v2's cert advisor only suggests which credential helps.
-- [ ] **Deep-research prompt generator** — exportable 6-axis company research prompt for external tools (`modes/deep.md`).
-- [ ] **Setup doctor / pipeline integrity check** — one-command "is everything wired correctly" diagnostics (`doctor.mjs`, `cv-sync-check.mjs`, `verify-pipeline.mjs`); v2 has only the LLM health badge.
-- [ ] **Batch/parallel headless evaluation** — fan-out eval workers with tracker merge (`batch/batch-runner.sh`, `merge-tracker.mjs`).
+Deliberately skipped (revisit only with a reason):
+- **Portal account creation + Gmail verification loop** — ToS/liability risk; contradicts the app's human-in-the-loop stance and the CWS positioning.
+- **Per-ATS apply adapters** (`apply-engine/adapters/`) — maintenance treadmill; generic autofill + field memory covers most. Revisit if a specific ATS repeatedly fails.
+- **LaTeX résumé output** — HTML→PDF is clean; requires a tectonic install.
+- **Batch/parallel headless evaluation** — CLI-world concern; the app embeds/scores in-process.
+- **Investor tracker** — scope creep; the contacts entity covers the useful core.

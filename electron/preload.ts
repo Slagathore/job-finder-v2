@@ -143,6 +143,25 @@ contextBridge.exposeInMainWorld('api', {
     check: () => invoke('update:check'),
     silence: (mode: 'until-next' | 'forever' | 'clear') => invoke('update:silence', mode),
   },
+  career: {
+    insights: () => invoke('career:insights'),
+    doctor: () => invoke('career:doctor'),
+    project: (idea: string) => invoke('career:project', idea),
+    training: (course: string) => invoke('career:training', course),
+    deep: (company: string, role: string) => invoke('career:deep', { company, role }),
+  },
+  stories: {
+    list: () => invoke('stories:list'),
+    add: (prompt: string, story: string, tags?: string) => invoke('stories:add', { prompt, story, tags }),
+    delete: (id: number) => invoke('stories:delete', id),
+  },
+  contacts: {
+    list: (company?: string) => invoke('contacts:list', company),
+    add: (c: any) => invoke('contacts:add', c),
+    delete: (id: number) => invoke('contacts:delete', id),
+    discover: (company: string, role?: string) => invoke('contacts:discover', { company, role }),
+    outreach: (contactId: number, jobId?: number) => invoke('contacts:outreach', { contactId, jobId }),
+  },
   app: {
     version: () => invoke('app:version'),
     hubInfo: () => invoke('app:hubInfo'),

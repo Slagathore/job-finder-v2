@@ -32,6 +32,8 @@ export function SettingsTab() {
   const [stats, setStats] = useState<any>(null);
   const [pruneMsg, setPruneMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [doctor, setDoctor] = useState<{ name: string; ok: boolean; detail: string }[]>([]);
+  const [doctorBusy, setDoctorBusy] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -179,6 +181,21 @@ export function SettingsTab() {
           </div>
         </div>
       )}
+
+      <div className="profile-card" style={{ marginTop: 18 }}>
+        <h2>Diagnostics</h2>
+        <p className="muted small">One-click health check of every subsystem — run this when something seems off.</p>
+        <button className="primary" onClick={async () => { setDoctor([]); setDoctorBusy(true); try { setDoctor(await window.api.career.doctor()); } finally { setDoctorBusy(false); } }} disabled={doctorBusy}>
+          {doctorBusy ? 'Checking…' : 'Run diagnostics'}
+        </button>
+        {doctor.length > 0 && (
+          <ul className="rules" style={{ marginTop: 8 }}>
+            {doctor.map((c, i) => (
+              <li key={i}>{c.ok ? '✅' : '❌'} <b>{c.name}</b> <span className="muted small">— {c.detail}</span></li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="profile-card" style={{ marginTop: 18 }}>
         <h2>Updates</h2>

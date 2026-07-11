@@ -6,6 +6,8 @@ import { parseJsonLoose } from '../lib/json';
 export interface PrepDoc { questions: string[]; stories: { q: string; a: string }[]; askThem: string[]; }
 
 const SYSTEM = `Prepare a candidate for an interview using ONLY their real experience line items.
+If SAVED STORIES are provided, reuse and adapt the ones that fit this role instead of inventing new
+angles for the same experiences — refine wording to this job, keep the substance.
 Respond with ONLY this JSON (no prose):
 {
   "questions": ["<likely interview questions for this role>"],
@@ -15,13 +17,15 @@ Respond with ONLY this JSON (no prose):
 
 export function buildPrepPrompt(
   job: { title: string; company: string; description?: string | null },
-  items: { kind: string; text: string }[]
+  items: { kind: string; text: string }[],
+  bank: { prompt: string; story: string }[] = []
 ): ChatMessage[] {
   const jd = (job.description ?? '').slice(0, 4000);
   const lines = items.map(i => `- (${i.kind}) ${i.text}`).join('\n');
+  const saved = bank.map(s => `- Q: ${s.prompt}\n  A: ${s.story}`).join('\n');
   return [
     { role: 'system', content: SYSTEM },
-    { role: 'user', content: `JOB: ${job.title} @ ${job.company}\n${jd}\n\nLINE ITEMS:\n${lines || '(none)'}\n\nReturn the prep JSON.` },
+    { role: 'user', content: `JOB: ${job.title} @ ${job.company}\n${jd}\n\nLINE ITEMS:\n${lines || '(none)'}${saved ? `\n\nSAVED STORIES (reuse where they fit):\n${saved}` : ''}\n\nReturn the prep JSON.` },
   ];
 }
 

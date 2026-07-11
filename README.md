@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue.svg)
-![Tests](https://img.shields.io/badge/tests-135%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-144%20passing-brightgreen.svg)
 ![Electron](https://img.shields.io/badge/Electron-React%20%2B%20TypeScript-9feaf9.svg)
 
 ![Dashboard](store/screenshot-1-dashboard.png)
@@ -26,6 +26,9 @@ No account. No cloud. No telemetry. Your resume, applications, and search histor
 - **Kanban pipeline** — discovered → tailored → applied → responded → interview → offer, with follow-up nudges.
 - **Gmail ingest (optional)** — replies auto-advance your pipeline; interview/offer emails get confetti.
 - **A conversational agent** — drives the app ("find me remote analyst roles over $70k"), with per-capability permission gates and an audit log. Applying is always off by default.
+- **Application insights** — response-rate patterns by fit grade, work mode, and source, so you learn where your applications actually land.
+- **Contacts & outreach** — track recruiters/hiring managers (or auto-discover them), then draft a 300-character LinkedIn message that doesn't sound like everyone else's.
+- **Interview toolkit** — a persistent STAR story bank that grows with every prep, a portfolio-project evaluator, a course/cert worth-it evaluator, and a deep-research prompt generator.
 
 ![Pipeline](store/screenshot-2-pipeline.png)
 
@@ -62,7 +65,7 @@ There is no server. The app's own docs, database, backups, and exports all live 
 
 ## Architecture
 
-Electron + React + TypeScript + Vite, `better-sqlite3` for storage, provider-agnostic LLM layer (`electron/llm/provider.ts`), Vitest (135 tests). The full design doc — including the self-extension sandbox, permission matrix, and per-phase build history — is in **[PLAN.md](PLAN.md)**.
+Electron + React + TypeScript + Vite, `better-sqlite3` for storage, provider-agnostic LLM layer (`electron/llm/provider.ts`), Vitest (144 tests). The full design doc — including the self-extension sandbox, permission matrix, and per-phase build history — is in **[PLAN.md](PLAN.md)**.
 
 ## Contributing
 

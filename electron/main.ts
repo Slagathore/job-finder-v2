@@ -34,6 +34,7 @@ import { killAllChildren } from './selfext/exec';
 import { randomUUID } from 'crypto';
 import { runScan } from './scan/runner';
 import { checkForUpdates, silenceUpdates } from './update/check';
+import { registerCareerHandlers } from './ipc/career';
 import { runEmbeddings, discover } from './discovery/service';
 import { discoverBoardsFromJobs } from './boards/autodiscover';
 import { collapseAggregatorDupes } from './maintenance/dedupe';
@@ -414,6 +415,7 @@ app.whenReady().then(async () => {
   registerSearchHandlers();
   registerExportHandlers();
   registerWatchHandlers();
+  registerCareerHandlers();
   registerAppHandlers();
   try { const p = runPrune(); if (p.jobsDeleted || p.notificationsDeleted) console.log(`[prune] boot: -${p.jobsDeleted} jobs, -${p.notificationsDeleted} notifs`); } catch { /* */ }
   // Daily rotating DB backup — the whole job search lives in one SQLite file.
