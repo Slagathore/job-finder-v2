@@ -14,8 +14,6 @@ analyses; delete lines as they ship.
 ## Install / first-run UX
 
 - [ ] **Code signing** — the unsigned exe triggers SmartScreen ("Windows protected your PC → More info → Run anyway") for every new user; unsigned + low reputation is the single biggest adoption killer. Options: OV/EV cert (~$100-400/yr), winget submission (builds reputation), or Microsoft Store.
-- [ ] **`app.setAppUserModelId('com.cole.jobfinder')`** on Windows at boot — makes desktop notifications reliably attributable/actionable; without it toasts can misbehave outside the NSIS shortcut path (e.g. portable exe).
-- [ ] **First close-to-tray needs a one-time hint** — default `closeToTray: true` means clicking ✕ "doesn't quit," which reads as a bug to a new user. Show a single tray balloon/notification the first time.
 - [ ] **Seeded boards are AI/tech-industry-heavy** (Anthropic, Intercom, Hume AI, …) — fine as a demo, wrong for most users. Ask for target roles/industries on first run, or ship broader seeds.
 - [ ] **Uninstall leaves `%APPDATA%\Job Finder` behind** — good data-safety default, but add an optional "also delete my data" checkbox (electron-builder `deleteAppDataOnUninstall` is all-or-nothing; a custom NSIS page can make it opt-in).
 - [ ] **Consider a real first-run wizard** — the Dashboard checklist is decent, but name/email + role targets + Ollama-vs-API-key in one guided pass would cut time-to-first-value.

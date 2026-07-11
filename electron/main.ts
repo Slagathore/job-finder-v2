@@ -50,6 +50,10 @@ const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 // live instance without touching real data. Must be set before the lock check.
 if (process.env.JF_USER_DATA) app.setPath('userData', process.env.JF_USER_DATA);
 
+// Windows toasts are attributed by AppUserModelId; without matching the appId
+// they can silently fail from the portable exe / dev runs.
+if (process.platform === 'win32') app.setAppUserModelId('com.cole.jobfinder');
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let closeToTray = true;
@@ -227,6 +231,14 @@ function createWindow() {
     if (!quitting && closeToTray) {
       e.preventDefault();
       mainWindow?.hide();
+      // One-time hint: without this, the first hide-to-tray reads as "the app
+      // won't close" to a new user.
+      try {
+        if (!readSettings().trayHintShown) {
+          writeSetting('trayHintShown', true);
+          notify('Job Finder is still running in the system tray — scheduled scans and the extension keep working. Right-click the tray icon to quit, or turn this off in Settings.');
+        }
+      } catch { /* */ }
     } else {
       // Close-to-tray off: closing the window means quit — without this,
       // window-all-closed leaves a headless process running behind the tray.

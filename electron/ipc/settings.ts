@@ -92,6 +92,9 @@ export const DEFAULTS = {
   // ── Update notifications ────────────────────────────────────────────
   updateSilence: '',         // '' = notify | 'until:<sha>' | 'forever' (emergencies override)
 
+  // ── One-time UX hints ───────────────────────────────────────────────
+  trayHintShown: false,      // "still running in the tray" balloon on first hide
+
   // ── Browser-extension ingress (§5.1 / phase 6) ──────────────────────
   hubPort: 17893,
   hubToken: '',            // generated on first boot if empty
