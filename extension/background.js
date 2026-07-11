@@ -14,6 +14,8 @@ async function postJSON(path, payload) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-JF-Token': token },
     body: JSON.stringify(payload),
+    // A wedged hub (connected but silent) must not hang the service worker.
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error('hub HTTP ' + res.status);
   return res.json();
@@ -24,7 +26,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     try {
       if (msg.cmd === 'ping') {
         const { hubUrl } = await getCfg();
-        const res = await fetch(hubUrl.replace(/\/$/, '') + '/ping');
+        const res = await fetch(hubUrl.replace(/\/$/, '') + '/ping', { signal: AbortSignal.timeout(10000) });
         sendResponse({ ok: res.ok, data: res.ok ? await res.json() : null });
       } else if (msg.cmd === 'pushJobs') {
         sendResponse({ ok: true, data: await postJSON('/ingest/jobs', { jobs: msg.jobs || [] }) });

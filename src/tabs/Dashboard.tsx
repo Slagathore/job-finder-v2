@@ -20,26 +20,29 @@ export function Dashboard() {
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
-    const c = await window.api.jobs.counts();
-    setTotal(c.total);
-    const jl = await window.api.jobs.list({ limit: 50 });
-    setJobs(jl);
-    setToday(await window.api.digest.today());
-    const [health, settings, items, prof] = await Promise.all([
-      window.api.llm.health(), window.api.settings.get(),
-      window.api.experience.list(), window.api.experience.getProfile(),
-    ]);
-    setGs({
-      llm: health.ollamaUp || health.anthropicConfigured,
-      contact: !!(settings.candidateName && settings.candidateEmail),
-      jobs: c.total > 0,
-      experience: (items?.length ?? 0) > 0,
-      embedded: !!(prof?.profile || (prof?.roleFits?.length)),
-      extension: jl.some((j: any) => /ext/.test(j.source || '')),
-    });
-    setDigest(await window.api.digest.get());
-    setHeat(await window.api.activity.heatmap(16));
-    setLoading(false);
+    try {
+      const c = await window.api.jobs.counts();
+      setTotal(c.total);
+      const jl = await window.api.jobs.list({ limit: 50 });
+      setJobs(jl);
+      setToday(await window.api.digest.today());
+      const [health, settings, items, prof] = await Promise.all([
+        window.api.llm.health(), window.api.settings.get(),
+        window.api.experience.list(), window.api.experience.getProfile(),
+      ]);
+      setGs({
+        llm: health.ollamaUp || health.anthropicConfigured,
+        contact: !!(settings.candidateName && settings.candidateEmail),
+        jobs: c.total > 0,
+        experience: (items?.length ?? 0) > 0,
+        embedded: !!(prof?.profile || (prof?.roleFits?.length)),
+        extension: jl.some((j: any) => /ext/.test(j.source || '')),
+      });
+      setDigest(await window.api.digest.get());
+      setHeat(await window.api.activity.heatmap(16));
+    } finally {
+      setLoading(false); // never leave the tab stuck on skeleton bars
+    }
   }
   function heatColor(n: number): string {
     if (n <= 0) return 'var(--panel2)';

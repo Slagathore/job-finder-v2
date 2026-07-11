@@ -8,7 +8,11 @@ export function HealthBadge() {
 
   async function refresh() {
     setLoading(true);
-    try { setH(await window.api.llm.health()); } finally { setLoading(false); }
+    // catch: this runs on a 30s interval — a rejecting IPC must not feed the
+    // global unhandledrejection toast every tick. null renders as "LLM offline".
+    try { setH(await window.api.llm.health()); }
+    catch { setH(null); }
+    finally { setLoading(false); }
   }
   useEffect(() => { refresh(); const t = setInterval(refresh, 30_000); return () => clearInterval(t); }, []);
 

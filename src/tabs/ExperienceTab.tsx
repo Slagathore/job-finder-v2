@@ -16,13 +16,16 @@ export function ExperienceTab() {
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    setItems(await window.api.experience.list());
-    const p = await window.api.experience.getProfile();
-    setProfile(p.profile); setRoleFits(p.roleFits ?? []);
-    setRules(await window.api.rules.list());
-    const h = await window.api.llm.health();
-    setLlmDown(!(h.ollamaUp || h.anthropicConfigured));
-    setLoading(false);
+    try {
+      setItems(await window.api.experience.list());
+      const p = await window.api.experience.getProfile();
+      setProfile(p.profile); setRoleFits(p.roleFits ?? []);
+      setRules(await window.api.rules.list());
+      const h = await window.api.llm.health();
+      setLlmDown(!(h.ollamaUp || h.anthropicConfigured));
+    } finally {
+      setLoading(false);
+    }
   }
   const NEED_AI = 'No line items created — the AI isn’t connected. Start Ollama (and `ollama pull nomic-embed-text`) or set an Anthropic key in Settings.';
   useEffect(() => { refresh(); }, []);

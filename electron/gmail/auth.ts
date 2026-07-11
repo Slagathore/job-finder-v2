@@ -16,6 +16,7 @@ async function tokenRequest(params: Record<string, string>): Promise<any> {
   const res = await fetch(TOKEN, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params).toString(),
+    signal: AbortSignal.timeout(30_000),
   });
   const j = await res.json();
   if (!res.ok) throw new Error(j.error_description || j.error || `token HTTP ${res.status}`);

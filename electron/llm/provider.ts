@@ -103,6 +103,8 @@ async function chatOpenAICompat(
       temperature: opts.temperature ?? 0.4,
       max_tokens: opts.maxTokens ?? 2048,
     }),
+    // A hung model server must not freeze the scan→embed→discover chain forever.
+    signal: AbortSignal.timeout(120_000),
   });
   if (!res.ok) throw new Error(`openai-compat HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const j: any = await res.json();
@@ -134,6 +136,7 @@ async function chatAnthropic(
       temperature: opts.temperature ?? 0.4,
       max_tokens: opts.maxTokens ?? 2048,
     }),
+    signal: AbortSignal.timeout(120_000),
   });
   if (!res.ok) throw new Error(`anthropic HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const j: any = await res.json();
@@ -213,6 +216,7 @@ export async function embed(s: SettingsLike, texts: string[]): Promise<number[][
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: s.embeddingModel, input: texts }),
+    signal: AbortSignal.timeout(120_000), // cold model load can be slow, but never hang forever
   });
   if (!res.ok) throw new Error(`embed HTTP ${res.status}`);
   const j: any = await res.json();

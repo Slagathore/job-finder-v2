@@ -7,7 +7,7 @@ export function CareerTab() {
   const [watch, setWatch] = useState<any[]>([]);
   const [watchName, setWatchName] = useState('');
   const [watchLoading, setWatchLoading] = useState(true);
-  useEffect(() => { window.api.watch.list().then(w => { setWatch(w); setWatchLoading(false); }); }, []);
+  useEffect(() => { window.api.watch.list().then(setWatch).finally(() => setWatchLoading(false)); }, []);
   async function addWatch() { if (!watchName.trim()) return; await window.api.watch.add(watchName.trim()); setWatchName(''); setWatch(await window.api.watch.list()); }
   async function rmWatch(id: number, label: string) {
     const ok = await confirmDialog({ title: 'Stop watching', message: `Stop watching "${label}"?`, confirmLabel: 'Remove', danger: true });

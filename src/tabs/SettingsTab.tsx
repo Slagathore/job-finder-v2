@@ -40,7 +40,7 @@ export function SettingsTab() {
       window.api.blocklist.list().then(setBlocklist),
       window.api.gmail.status().then(setGmail),
       window.api.maintenance.stats().then(setStats),
-    ]).then(() => setLoading(false));
+    ]).finally(() => setLoading(false));
   }, []);
 
   async function pruneNow() {

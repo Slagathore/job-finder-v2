@@ -8,7 +8,7 @@ export function BoardsTab() {
   const [rowStatus, setRowStatus] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
 
-  async function refresh() { setBoards(await window.api.boards.list()); setLoading(false); }
+  async function refresh() { try { setBoards(await window.api.boards.list()); } finally { setLoading(false); } }
   useEffect(() => { refresh(); }, []);
 
   async function probe(b: any) {

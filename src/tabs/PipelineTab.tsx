@@ -15,9 +15,12 @@ export function PipelineTab() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   async function refresh() {
-    setBoard(await window.api.pipeline.board());
-    setFeed(await window.api.notifications.list());
-    setLoading(false);
+    try {
+      setBoard(await window.api.pipeline.board());
+      setFeed(await window.api.notifications.list());
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     refresh();

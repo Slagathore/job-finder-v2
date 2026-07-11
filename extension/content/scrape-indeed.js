@@ -99,7 +99,10 @@ setTimeout(async () => {
   const jobs = scrapeIndeedCards();
   const query = new URLSearchParams(location.search).get('q') || '';
   if (jobs.length) {
-    chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs });
+    // Stop paginating when the hub isn't accepting — walking 20 pages into a
+    // dead hub wastes navigation (and anti-bot budget) for zero data.
+    const push = await chrome.runtime.sendMessage({ cmd: 'pushJobs', jobs }).catch(() => null);
+    if (!push || !push.ok) return;
   } else if (query) {
     // A real search with zero recognizable cards = selectors likely stale.
     chrome.runtime.sendMessage({ cmd: 'scraperStale', site: 'indeed', url: location.href });

@@ -55,6 +55,7 @@ let tray: Tray | null = null;
 let closeToTray = true;
 let quitting = false;
 let scanTimer: NodeJS.Timeout | null = null;
+let backupTimer: NodeJS.Timeout | null = null;
 let hubServer: Server | null = null;
 let shuttingDown = false;
 
@@ -72,10 +73,12 @@ function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  if (backupTimer) { clearInterval(backupTimer); backupTimer = null; }
   if (embedTimer) { clearTimeout(embedTimer); embedTimer = null; }
   if (atsTimer) { clearTimeout(atsTimer); atsTimer = null; }
-  try { hubServer?.close(); } catch { /* */ }
+  try { hubServer?.closeAllConnections?.(); hubServer?.close(); } catch { /* */ }
   killAllChildren();
+  try { tray?.destroy(); tray = null; } catch { /* */ }
   closeDb();
 }
 
@@ -141,24 +144,33 @@ function notify(body: string, tab?: string) {
  * new, surface the best fits, and tell Cole what's actually worth looking at —
  * not just how many rows landed.
  */
+let tickRunning = false;
 async function scheduledTick(trigger: 'manual' | 'scheduled'): Promise<void> {
-  const s = await runScan(trigger);
-  console.log(`[scheduler] scan: +${s.added} jobs (${s.found} found, ${s.scanned} boards)`);
-  try { collapseAggregatorDupes(); } catch (e: any) { console.error('[dedupe]', e?.message ?? e); }
-  if (s.added > 0) {
-    let topLine = '';
-    try {
-      await runEmbeddings(false);
-      const d = await discover(20);
-      const top = (d.results ?? [])[0];
-      if (top?.sim) topLine = ` · top fit ${Math.round(top.sim * 100)}%: ${top.title} @ ${top.company}`;
-    } catch (e: any) { console.error('[scheduler] embed/discover skipped:', e?.message ?? e); }
-    try { addNotification('jobs', { added: s.added, found: s.found, scanned: s.scanned, topLine }); } catch { /* */ }
-    if (readSettings().notifyOnNewJobs) {
-      notify(`${s.added} new job${s.added === 1 ? '' : 's'} from the latest scan${topLine}`, 'search');
+  // Reentrancy guard: a slow cycle (many boards, cold embed model) must not
+  // stack with the next interval firing — skip instead of overlapping.
+  if (tickRunning) { console.log('[scheduler] previous cycle still running — tick skipped'); return; }
+  tickRunning = true;
+  try {
+    const s = await runScan(trigger);
+    console.log(`[scheduler] scan: +${s.added} jobs (${s.found} found, ${s.scanned} boards)`);
+    try { collapseAggregatorDupes(); } catch (e: any) { console.error('[dedupe]', e?.message ?? e); }
+    if (s.added > 0) {
+      let topLine = '';
+      try {
+        await runEmbeddings(false);
+        const d = await discover(20);
+        const top = (d.results ?? [])[0];
+        if (top?.sim) topLine = ` · top fit ${Math.round(top.sim * 100)}%: ${top.title} @ ${top.company}`;
+      } catch (e: any) { console.error('[scheduler] embed/discover skipped:', e?.message ?? e); }
+      try { addNotification('jobs', { added: s.added, found: s.found, scanned: s.scanned, topLine }); } catch { /* */ }
+      if (readSettings().notifyOnNewJobs) {
+        notify(`${s.added} new job${s.added === 1 ? '' : 's'} from the latest scan${topLine}`, 'search');
+      }
+      send('scan:done', s);
+      send('notify');
     }
-    send('scan:done', s);
-    send('notify');
+  } finally {
+    tickRunning = false;
   }
 }
 
@@ -167,6 +179,8 @@ async function scheduledTick(trigger: 'manual' | 'scheduled'): Promise<void> {
  * scan→dedupe→embed→discover chain and (when Gmail is connected) a mail
  * ingest, surfacing notifications. Re-armed whenever the interval changes.
  */
+let mailRunning = false;
+
 function armScheduler() {
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   const minutes = Number(readSettings().scanIntervalMinutes) || 0;
@@ -176,10 +190,13 @@ function armScheduler() {
     // Opportunistic retention prune (safe: untouched old discovered jobs only).
     try { runPrune(); } catch { /* */ }
     // Also ingest mail on the same cadence when Gmail is connected.
-    if (readSettings().gmailRefreshToken) {
+    // Same reentrancy rule: never launch a second ingest over a slow one.
+    if (readSettings().gmailRefreshToken && !mailRunning) {
+      mailRunning = true;
       ingestInbox()
         .then(r => { if (r.advanced > 0) send('notify'); })
-        .catch(err => console.error('[scheduler] mail ingest failed:', err?.message ?? err));
+        .catch(err => console.error('[scheduler] mail ingest failed:', err?.message ?? err))
+        .finally(() => { mailRunning = false; });
     }
   }, minutes * 60_000);
 }
@@ -210,6 +227,23 @@ function createWindow() {
     if (!quitting && closeToTray) {
       e.preventDefault();
       mainWindow?.hide();
+    } else {
+      // Close-to-tray off: closing the window means quit — without this,
+      // window-all-closed leaves a headless process running behind the tray.
+      quitting = true;
+    }
+  });
+
+  // Renderer crash recovery: reload the window instead of leaving it blank.
+  // Throttled so a crash loop can't spin the CPU.
+  let lastRendererReload = 0;
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit') return;
+    console.error('[renderer] process gone:', details.reason);
+    const now = Date.now();
+    if (now - lastRendererReload > 30_000 && mainWindow && !mainWindow.isDestroyed()) {
+      lastRendererReload = now;
+      mainWindow.webContents.reload();
     }
   });
 }
@@ -289,6 +323,15 @@ function startIngressServer() {
       return msg;
     },
   }), port);
+  // A port collision means the extension silently can't pair — tell the user
+  // instead of burying it in the console.
+  hubServer.on('error', (err: any) => {
+    if (err?.code === 'EADDRINUSE') {
+      try { addNotification('hub', { error: `Port ${port} is already in use — extension pairing is offline.` }); } catch { /* */ }
+      notify(`Extension hub couldn't start: port ${port} is in use. Close the other program or change the hub port in Settings.`, 'settings');
+      send('notify');
+    }
+  });
 }
 
 function registerAppHandlers() {
@@ -366,6 +409,11 @@ app.whenReady().then(async () => {
     if (b.ok && !b.skipped) console.log(`[backup] ${b.path}`);
     else if (!b.ok) console.error('[backup] failed:', b.error);
   }).catch(err => console.error('[backup] failed:', err?.message ?? err));
+  // Close-to-tray keeps the process alive for weeks, so boot-only backups go
+  // stale — re-check every 6h (runBackup skips if today's file exists).
+  backupTimer = setInterval(() => {
+    runBackup().catch(err => console.error('[backup] failed:', err?.message ?? err));
+  }, 6 * 60 * 60 * 1000);
   // Collapse any aggregator/ATS duplicate pairs that accumulated while off.
   try { collapseAggregatorDupes(); } catch (e: any) { console.error('[dedupe] boot:', e?.message ?? e); }
   startIngressServer();

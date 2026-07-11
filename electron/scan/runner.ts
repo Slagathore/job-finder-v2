@@ -17,12 +17,27 @@ export interface ScanSummary {
 
 interface BoardRow { id: number; name: string; url: string; enabled: number; ingress: string | null; }
 
+let scanRunning = false;
+export function scanBusy(): boolean { return scanRunning; }
+
 /**
  * Run an ATS scan over all enabled boards and persist new jobs.
  * Pure ATS detection/parsing lives in ats.ts; this is the side-effecting shell:
  * load boards → fetch → title-filter → dedup → insert → log.
+ * The reentrancy lock lives HERE so every entry point shares it — IPC,
+ * scheduler tick, tray "Scan now", and the agent all call this function.
  */
 export async function runScan(trigger: 'manual' | 'scheduled' | 'agent' = 'manual'): Promise<ScanSummary> {
+  if (scanRunning) throw new Error('A scan is already running.');
+  scanRunning = true;
+  try {
+    return await doScan(trigger);
+  } finally {
+    scanRunning = false;
+  }
+}
+
+async function doScan(trigger: 'manual' | 'scheduled' | 'agent'): Promise<ScanSummary> {
   const db = getDb();
   const settings = readSettings();
   const titleFilter = buildTitleFilter({

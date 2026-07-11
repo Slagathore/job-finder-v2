@@ -10,7 +10,7 @@ export function SelfExtendTab() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function refresh() { setList(await window.api.selfext.list()); setLoading(false); }
+  async function refresh() { try { setList(await window.api.selfext.list()); } finally { setLoading(false); } }
   useEffect(() => { refresh(); }, []);
 
   async function propose() {

@@ -49,20 +49,20 @@ const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
 export async function listMessages(token: string, q: string, max = 30): Promise<{ id: string }[]> {
   const url = `${API}/messages?q=${encodeURIComponent(q)}&maxResults=${max}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`gmail list HTTP ${res.status}`);
   const j = await res.json();
   return j.messages ?? [];
 }
 
 export async function getMessage(token: string, id: string): Promise<Email> {
-  const res = await fetch(`${API}/messages/${id}?format=full`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`${API}/messages/${id}?format=full`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`gmail get HTTP ${res.status}`);
   return parseMessage(await res.json());
 }
 
 export async function getProfileEmail(token: string): Promise<string> {
-  const res = await fetch(`${API}/profile`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`${API}/profile`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) return '';
   return (await res.json()).emailAddress ?? '';
 }

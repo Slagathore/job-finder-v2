@@ -119,7 +119,9 @@ export default function App() {
             </span>
           </div>
         )}
-        <ErrorBoundary>
+        {/* key={tab}: a crash in one tab must not brick every other tab —
+            remount the boundary (and its error state) on tab switch. */}
+        <ErrorBoundary key={tab}>
           {tab === 'dashboard' && <Dashboard />}
           {tab === 'settings' && <SettingsTab />}
           {tab === 'search' && <SearchTab />}
