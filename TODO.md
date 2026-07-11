@@ -5,7 +5,8 @@ analyses; delete lines as they ship.
 
 ## Post-launch (v1.0.0 shipped 2026-07-11 — Win signed + mac + linux)
 
-- [ ] **Nobody has ever run the macOS or Linux build.** They compile, package, and pass all tests on CI, but zero real-world mileage. First-launch smoke test on each is the highest-value next action.
+- [x] ~~Linux smoke test~~ — **AppImage verified working** on Ubuntu 24.04 (WSLg, 2026-07-11): window renders, 29 tables created, 35 boards seeded, hub server binds, backup runs, first-run wizard shows, zero errors. Note: a bare/container Linux needs `libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libgtk-3-0t64 libgbm1 libasound2t64 libxss1` — any real desktop already has them.
+- [ ] **Nobody has ever run the macOS build.** It compiles, packages, and passes all tests on CI, but has zero real-world mileage. Needs a Mac (or a willing user) to smoke-test.
 - [ ] **macOS is unsigned** — Gatekeeper shows "damaged" on first open (README documents the right-click → Open workaround). Proper fix = Apple Developer Program ($99/yr) + notarization. The Azure cert does nothing on macOS.
 - [ ] **winget submission** — now that a signed exe ships in a GitHub Release, a winget manifest gets users a SmartScreen-free `winget install` and an update channel. Use the `winget-releaser` Action.
 - [ ] **CI does not sign Windows** — the signed exes are built locally and uploaded by hand. To automate: create an Azure service principal, grant it "Artifact Signing Certificate Profile Signer", add AZURE_* secrets, drop `-ExcludeEnvironmentCredential` from `scripts/azure-sign.js`.
