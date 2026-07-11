@@ -9,14 +9,39 @@ function encryptionReady(): boolean {
   try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
 }
 
-/** Serialize a setting value for storage; encrypts secret keys when possible. */
+/** Raised when a secret cannot be encrypted — we refuse to store it in cleartext. */
+export class SecretStorageUnavailableError extends Error {
+  constructor() {
+    super(
+      'Cannot store this secret: no OS encryption backend is available. ' +
+      'On Linux install a keyring (e.g. gnome-keyring / libsecret) and restart the app. ' +
+      'The value was NOT saved — storing API keys or OAuth tokens in cleartext is not allowed.'
+    );
+    this.name = 'SecretStorageUnavailableError';
+  }
+}
+
+/**
+ * Serialize a setting value for storage; encrypts secret keys.
+ * A secret that cannot be encrypted is REFUSED, never written in cleartext —
+ * on a keychain-less Linux box that would leave a live Gmail refresh token
+ * readable in the DB file (and in every rotating backup).
+ */
 function encodeValue(key: string, value: any): string {
-  if (SECRET_KEYS.has(key) && value != null && value !== '' && encryptionReady()) {
-    try { return JSON.stringify({ __enc: safeStorage.encryptString(String(value)).toString('base64') }); }
-    catch { /* fall back to plaintext */ }
+  const isSecret = SECRET_KEYS.has(key) && value != null && value !== '';
+  if (isSecret) {
+    if (!encryptionReady()) throw new SecretStorageUnavailableError();
+    try {
+      return JSON.stringify({ __enc: safeStorage.encryptString(String(value)).toString('base64') });
+    } catch {
+      throw new SecretStorageUnavailableError();
+    }
   }
   return JSON.stringify(value);
 }
+
+/** Is secret storage usable on this machine? Surfaced in Settings + doctor. */
+export function secretsAvailable(): boolean { return encryptionReady(); }
 
 /** Decode a stored value; transparently decrypts the `{__enc}` envelope. */
 function decodeValue(raw: string): any {
@@ -132,10 +157,18 @@ export function registerSettingsHandlers() {
   ipcMain.handle('settings:get', () => readSettings());
 
   ipcMain.handle('settings:set', (_e, patch: Record<string, any>) => {
-    const tx = getDb().transaction((entries: [string, any][]) => {
-      for (const [k, v] of entries) writeSetting(k, v);
-    });
-    tx(Object.entries(patch));
+    try {
+      const tx = getDb().transaction((entries: [string, any][]) => {
+        for (const [k, v] of entries) writeSetting(k, v);
+      });
+      tx(Object.entries(patch));
+    } catch (e: any) {
+      // The transaction rolls back, so nothing was persisted — tell the renderer.
+      if (e instanceof SecretStorageUnavailableError) return { error: e.message, settings: readSettings() };
+      throw e;
+    }
     return readSettings();
   });
+
+  ipcMain.handle('settings:secretsAvailable', () => secretsAvailable());
 }

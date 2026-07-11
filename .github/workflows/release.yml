@@ -1,0 +1,74 @@
+name: Release
+
+# Builds the macOS and Linux artifacts for a release. Windows is built and
+# SIGNED locally (Azure Artifact Signing — see SIGNING.md) and uploaded by hand,
+# because CI has no access to the signing credentials.
+#
+# Trigger: publish a release (or run manually against an existing tag).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach assets to (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS
+          - os: ubuntu-latest
+            name: Linux
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build renderer + main
+        run: npm run build
+
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npx electron-builder --mac --publish never
+
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: npx electron-builder --linux --publish never
+
+      - name: Upload assets to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          assets=(dist-installer/*.dmg dist-installer/*.zip dist-installer/*.AppImage dist-installer/*.deb)
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "No artifacts produced!" >&2
+            ls -la dist-installer || true
+            exit 1
+          fi
+          echo "Uploading: ${assets[*]}"
+          gh release upload "$TAG" "${assets[@]}" --clobber

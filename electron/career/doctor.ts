@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getDb, getDbPath } from '../ipc/db';
-import { readSettings } from '../ipc/settings';
+import { readSettings, secretsAvailable } from '../ipc/settings';
 import { health } from '../llm/provider';
 
 /**
@@ -81,7 +81,16 @@ export async function runDoctor(): Promise<DoctorCheck[]> {
     checks.push({ name: 'Experience engine', ok: false, detail: e?.message ?? String(e) });
   }
 
-  // 8. Gmail (optional — only flagged if configured but broken-looking)
+  // 8. Secret storage (OS keychain) — without it we refuse to store API keys/tokens
+  const secretsOk = secretsAvailable();
+  checks.push({
+    name: 'Secret storage', ok: secretsOk,
+    detail: secretsOk
+      ? 'OS encryption available — API keys and tokens are encrypted at rest'
+      : 'NO OS keychain — API keys and Gmail tokens cannot be saved. On Linux, install gnome-keyring/libsecret and restart.',
+  });
+
+  // 9. Gmail (optional — only flagged if configured but broken-looking)
   checks.push({
     name: 'Gmail ingest', ok: true,
     detail: s.gmailRefreshToken ? `connected as ${s.gmailEmail || 'unknown'}` : 'not connected (optional)',

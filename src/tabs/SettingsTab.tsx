@@ -94,7 +94,9 @@ export function SettingsTab() {
     for (const f of FIELDS) {
       patch[f.key] = f.type === 'number' ? Number(s[f.key]) || 0 : s[f.key];
     }
-    await window.api.settings.set(patch);
+    const r: any = await window.api.settings.set(patch);
+    // Secrets are refused (never stored in cleartext) when no OS keychain exists.
+    if (r && r.error) { toast(r.error, 'error'); setSaved(false); return; }
     await window.api.app.rearmScheduler();
     setSaved(true);
   }
