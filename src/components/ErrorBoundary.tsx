@@ -25,7 +25,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <div className="error-card">
             <h1>Something went wrong</h1>
             <p className="muted">{this.state.error.message || String(this.state.error)}</p>
-            <button className="primary" onClick={() => location.reload()}>Reload</button>
+            {/* Retry remounts just this boundary's subtree; Reload is the big hammer. */}
+            <button className="primary" onClick={() => this.setState({ error: null })}>Try again</button>{' '}
+            <button onClick={() => location.reload()}>Reload app</button>
           </div>
         </div>
       );

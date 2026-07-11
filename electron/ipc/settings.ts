@@ -94,6 +94,7 @@ export const DEFAULTS = {
 
   // ── One-time UX hints ───────────────────────────────────────────────
   trayHintShown: false,      // "still running in the tray" balloon on first hide
+  onboarded: false,          // first-run wizard completed (or skipped)
 
   // ── Browser-extension ingress (§5.1 / phase 6) ──────────────────────
   hubPort: 17893,

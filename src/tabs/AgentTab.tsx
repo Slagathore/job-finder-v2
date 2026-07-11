@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 interface Msg { role: 'user' | 'assistant'; content: string; plan?: { summary: string; steps: any[] }; results?: any[]; }
 
 export function AgentTab({ onOpenTab }: { onOpenTab: (tab: string) => void }) {
-  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [msgs, setMsgsRaw] = useState<Msg[]>([]);
+  // Cap the rendered transcript — marathon sessions must not grow the DOM forever.
+  const setMsgs = (fn: (m: Msg[]) => Msg[]) => setMsgsRaw(m => fn(m).slice(-200));
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [perms, setPerms] = useState<{ capability: string; mode: string }[]>([]);

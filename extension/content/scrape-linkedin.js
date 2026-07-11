@@ -109,6 +109,7 @@ setTimeout(jfAutoHarvestTick, 1800);
 // it changes — jfHarvestViewJobWithRetry's own id checks keep this idempotent.
 let jfLastHref = location.href;
 setInterval(() => {
+  if (document.hidden) return; // background LinkedIn tabs: don't poll all day
   if (location.href === jfLastHref) return;
   jfLastHref = location.href;
   jfAutoHarvestTick();

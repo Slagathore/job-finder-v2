@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { HealthBadge } from './components/HealthBadge';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { FirstRunWizard } from './components/FirstRunWizard';
 import { celebrate } from './lib/celebrate';
 import { FeedbackHost, toast } from './lib/feedback';
 import { Dashboard } from './tabs/Dashboard';
@@ -31,11 +32,36 @@ const TABS: { id: TabId; label: string; phase?: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<TabId>('dashboard');
+  const [visited, setVisited] = useState<TabId[]>(['dashboard']);
   const [version, setVersion] = useState('');
   const [update, setUpdate] = useState<Awaited<ReturnType<typeof window.api.update.check>>>(null);
+  const [showWizard, setShowWizard] = useState(false);
   const lastCelebrated = useRef<number>(-1);
 
+  useEffect(() => { setVisited(v => v.includes(tab) ? v : [...v, tab]); }, [tab]);
+
+  function renderTab(id: TabId): React.ReactNode {
+    switch (id) {
+      case 'dashboard': return <Dashboard />;
+      case 'settings': return <SettingsTab />;
+      case 'search': return <SearchTab />;
+      case 'pipeline': return <PipelineTab />;
+      case 'experience': return <ExperienceTab />;
+      case 'boards': return <BoardsTab />;
+      case 'career': return <CareerTab />;
+      case 'agent': return <AgentTab onOpenTab={(t) => setTab(t as TabId)} />;
+      case 'selfext': return <SelfExtendTab />;
+    }
+  }
+
   useEffect(() => { window.api.app.version().then(setVersion); }, []);
+
+  // First-run wizard: fresh profile = never onboarded and no contact set.
+  useEffect(() => {
+    window.api.settings.get()
+      .then(s => { if (!s.onboarded && !s.candidateName) setShowWizard(true); })
+      .catch(() => {});
+  }, []);
 
   // On-load update scan. Emergencies come back even when silenced.
   useEffect(() => { window.api.update.check().then(setUpdate).catch(() => {}); }, []);
@@ -96,6 +122,7 @@ export default function App() {
         <div className="sidebar-foot"><HealthBadge /></div>
       </aside>
 
+      {showWizard && <FirstRunWizard onDone={() => setShowWizard(false)} />}
       <main className="content">
         {update && (
           <div className={`update-banner ${update.emergency ? 'urgent' : ''}`}>
@@ -119,19 +146,15 @@ export default function App() {
             </span>
           </div>
         )}
-        {/* key={tab}: a crash in one tab must not brick every other tab —
-            remount the boundary (and its error state) on tab switch. */}
-        <ErrorBoundary key={tab}>
-          {tab === 'dashboard' && <Dashboard />}
-          {tab === 'settings' && <SettingsTab />}
-          {tab === 'search' && <SearchTab />}
-          {tab === 'pipeline' && <PipelineTab />}
-          {tab === 'experience' && <ExperienceTab />}
-          {tab === 'boards' && <BoardsTab />}
-          {tab === 'career' && <CareerTab />}
-          {tab === 'agent' && <AgentTab onOpenTab={(t) => setTab(t as TabId)} />}
-          {tab === 'selfext' && <SelfExtendTab />}
-        </ErrorBoundary>
+        {/* Tabs lazy-mount on first visit, then stay mounted (hidden) so
+            in-progress state — agent chats, search results, scan summaries —
+            survives tab switches. Each tab gets its own boundary so a crash
+            is isolated and retryable without nuking the others' state. */}
+        {TABS.map(t => visited.includes(t.id) && (
+          <div key={t.id} style={t.id === tab ? undefined : { display: 'none' }}>
+            <ErrorBoundary>{renderTab(t.id)}</ErrorBoundary>
+          </div>
+        ))}
       </main>
       <FeedbackHost />
     </div>
