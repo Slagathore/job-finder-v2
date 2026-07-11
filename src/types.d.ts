@@ -180,7 +180,7 @@ export interface Api {
   };
   update: {
     check: () => Promise<{
-      available: boolean; latestSha: string; summary: string;
+      available: boolean; latestVersion: string; summary: string;
       emergency: boolean; emergencyMessage: string; repoUrl: string;
     } | null>;
     silence: (mode: 'until-next' | 'forever' | 'clear') => Promise<boolean>;

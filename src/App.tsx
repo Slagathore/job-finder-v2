@@ -129,7 +129,7 @@ export default function App() {
             <span className="update-text">
               {update.emergency
                 ? <><strong>⚠ Critical update:</strong> {update.emergencyMessage}</>
-                : <><strong>Update available</strong> — {update.summary}</>}
+                : <><strong>Update available</strong> — v{update.latestVersion} · {update.summary}</>}
             </span>
             <span className="update-actions">
               <button className="update-get" onClick={() => window.api.app.openExternal(update.repoUrl)}>
