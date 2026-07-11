@@ -44,6 +44,11 @@ import type { Server } from 'http';
 const isDev = !app.isPackaged && !process.env.JF_PROD;
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 
+// JF_USER_DATA points the app at an alternate data directory (own DB, hub
+// token, and single-instance lock) — lets tests/screenshots run beside a
+// live instance without touching real data. Must be set before the lock check.
+if (process.env.JF_USER_DATA) app.setPath('userData', process.env.JF_USER_DATA);
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let closeToTray = true;
@@ -196,7 +201,6 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5177'); // 5173 belongs to DungeonMaster on this machine.
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }

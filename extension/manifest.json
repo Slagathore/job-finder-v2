@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Job Finder Harvester",
-  "version": "0.2.0",
-  "description": "Harvest jobs from Indeed / LinkedIn / CareerBuilder into your local Job Finder desktop app, and remember apply-form answers. Data only ever goes to 127.0.0.1.",
+  "version": "0.2.1",
+  "description": "Harvest jobs from Indeed, LinkedIn & other boards into your local Job Finder desktop app. Data only ever goes to 127.0.0.1.",
   "icons": { "128": "icon128.png", "48": "icon48.png", "16": "icon16.png" },
-  "permissions": ["activeTab", "storage", "tabs", "scripting"],
+  "permissions": ["storage"],
   "host_permissions": [
     "*://*.indeed.com/*",
     "*://*.careerbuilder.com/*",

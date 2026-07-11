@@ -15,6 +15,8 @@ import { CareerTab } from './tabs/CareerTab';
 
 type TabId = 'dashboard' | 'search' | 'pipeline' | 'experience' | 'boards' | 'career' | 'agent' | 'selfext' | 'settings';
 
+const KOFI_URL = 'https://ko-fi.com/sparklemuffin';
+
 const TABS: { id: TabId; label: string; phase?: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'search', label: 'Search' },
@@ -76,6 +78,12 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <div className="donate-box">
+          If this helped you, consider donating to help keep me focused on making more useful free apps? Thanks!
+          <button className="donate-btn" onClick={() => window.api.app.openExternal(KOFI_URL)}>
+            ☕ Donate on Ko-fi
+          </button>
+        </div>
         <div className="sidebar-foot"><HealthBadge /></div>
       </aside>
 

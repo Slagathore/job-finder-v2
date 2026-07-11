@@ -40,6 +40,14 @@ nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .navbtn .soon { font-size: 10px; color: var(--muted); }
 .navbtn.active .soon { color: rgba(255,255,255,.7); }
 
+.donate-box { padding: 8px 8px 12px; font-size: 11px; color: var(--muted); line-height: 1.45; }
+.donate-btn {
+  display: block; width: 100%; margin-top: 8px;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+  padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 12.5px;
+}
+.donate-btn:hover { background: var(--accent); border-color: var(--accent); color: white; }
+
 .sidebar-foot { border-top: 1px solid var(--border); padding-top: 10px; }
 .health { display: flex; align-items: center; gap: 8px; background: none; border: none;
   color: var(--muted); cursor: pointer; font-size: 12px; width: 100%; text-align: left; }

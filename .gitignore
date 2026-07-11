@@ -6,3 +6,5 @@ dist-installer/
 .DS_Store
 data/
 .env
+.fusion/
+extension.zip
