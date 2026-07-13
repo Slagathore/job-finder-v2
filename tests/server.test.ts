@@ -24,6 +24,17 @@ describe('handleRequest', () => {
     expect(r.body).toMatchObject({ ok: true, app: 'job-finder-v2' });
   });
 
+  it('rejects /ping when a browser page Origin is present (fingerprinting probe)', () => {
+    const r = handleRequest('GET', '/ping', { origin: 'https://evil.example.com' }, null, deps());
+    expect(r.status).toBe(403);
+  });
+
+  it('still serves /ping for the extension (no Origin, or a non-http(s) extension Origin)', () => {
+    expect(handleRequest('GET', '/ping', {}, null, deps()).status).toBe(200);
+    const r = handleRequest('GET', '/ping', { origin: 'chrome-extension://abcdefghijklmnop' }, null, deps());
+    expect(r.status).toBe(200);
+  });
+
   it('rejects ingest without the right token', () => {
     expect(handleRequest('POST', '/ingest/jobs', {}, { jobs: [] }, deps()).status).toBe(401);
     expect(handleRequest('POST', '/ingest/jobs', { 'x-jf-token': 'wrong' }, { jobs: [] }, deps()).status).toBe(401);

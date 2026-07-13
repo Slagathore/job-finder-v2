@@ -27,7 +27,19 @@ export function handleRequest(
   if (method === 'OPTIONS') return { status: 204, body: null };
 
   // /ping is unauthenticated so the extension can detect the hub before pairing.
+  // That makes it the one route a normal webpage's own JS could poll from an
+  // ordinary browser tab to fingerprint "is Job Finder running" (no CORS
+  // headers are sent back, so the page can't read the body, but a fetch() that
+  // resolves vs. rejects already leaks that much). The extension's requests
+  // come from its service worker (no Origin header, or a chrome-extension://
+  // one) and same-machine callers (curl, the app's own doctor check) never set
+  // an Origin at all — so reject only when an http(s) PAGE origin is present.
   if (method === 'GET' && path === '/ping') {
+    const origin = headers['origin'];
+    const originVal = Array.isArray(origin) ? origin[0] : origin;
+    if (originVal && /^https?:\/\//i.test(originVal)) {
+      return { status: 403, body: { error: 'Forbidden origin.' } };
+    }
     return { status: 200, body: { ok: true, app: 'job-finder-v2', version: deps.appVersion } };
   }
 
