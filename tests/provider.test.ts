@@ -47,6 +47,19 @@ describe('providerChain', () => {
   it('honors a model override for the primary slot', () => {
     expect(providerChain(base, 'custom:cloud')[0].model).toBe('custom:cloud');
   });
+
+  // H8: README/onboarding claim "nothing has to leave your machine" only holds
+  // if a genuinely fully-local chain is selectable. Set primaryModel to a local
+  // tag (no ":cloud" suffix) with no Anthropic key, and prove the whole chain
+  // stays on the loopback Ollama daemon — no cloud, no Anthropic entry, ever.
+  it('supports a fully local configuration with no cloud or Anthropic entry', () => {
+    const local = { ...base, primaryModel: 'llama3.2', fallbackLocalModel: 'llama3.2', anthropicApiKey: '' };
+    const chain = providerChain(local);
+    expect(chain).toHaveLength(1);
+    expect(chain.every(p => p.kind === 'ollama')).toBe(true);
+    expect(chain.every(p => !p.model.includes(':cloud'))).toBe(true);
+    expect(chain.every(p => /^http:\/\/(127\.0\.0\.1|localhost)/.test(p.baseUrl))).toBe(true);
+  });
 });
 
 describe('generate fallback', () => {

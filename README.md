@@ -1,6 +1,6 @@
 # Job Finder
 
-A free, local job search app. Scan job boards, find roles that actually fit your experience, tailor applications, and track everything in a kanban pipeline. It all runs in a desktop app and your data never leaves your machine.
+A free, local job search app. Scan job boards, find roles that actually fit your experience, tailor applications, and track everything in a kanban pipeline. It all runs in a desktop app on your machine, no cloud required. AI matching can run fully local or use a cloud model, your choice.
 
 [![Download](https://img.shields.io/github/v/release/Slagathore/job-finder-v2?label=download&color=5b8cff)](https://github.com/Slagathore/job-finder-v2/releases/latest)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
@@ -13,7 +13,7 @@ A free, local job search app. Scan job boards, find roles that actually fit your
 
 Job hunting is a second job with worse tooling. Boards bury good listings, aggregators re-post ghosts, and "easy apply" pipelines are built for employers, not you. Job Finder flips that. It is built entirely for the applicant, runs entirely on your computer, and uses AI only where it actually helps, which is matching your real experience to real openings.
 
-No account. No cloud. No telemetry. Your resume, applications, and search history live in a local SQLite file you can open, back up, or delete.
+No account. No telemetry. No cloud required, and nothing has to leave your machine if you set it up that way (see AI backend below). Your resume, applications, and search history live in a local SQLite file you can open, back up, or delete.
 
 ## What it does
 
@@ -52,9 +52,9 @@ The Mac build isn't notarized (Apple charges $99/yr for that), so Gatekeeper blo
 - `xattr -dr com.apple.quarantine "/Applications/Job Finder.app"`
 </details>
 
-AI backend (optional, pick one):
-- [Ollama](https://ollama.com) running locally, plus `ollama pull nomic-embed-text` for semantic search. Free and fully local.
-- Or an Anthropic API key in Settings.
+AI backend (optional, local or cloud, configurable):
+- [Ollama](https://ollama.com) running locally, plus `ollama pull nomic-embed-text` for semantic search (always local, no cloud embedding path exists). Chat, matching, and tailoring default to Ollama's hosted `kimi-k2.7-code:cloud` model though, reached through your local Ollama daemon with no extra signup, so a fresh install does talk to the network for those. Free and fully local capable: pull a local model instead (`ollama pull llama3.2`, for example), set it as the Primary model in Settings, and nothing has to leave your machine.
+- Or an Anthropic API key in Settings, a cloud call by definition.
 
 The app works without either. Scanning, harvesting, and the pipeline are plain code. AI powers matching, digesting, and tailoring.
 
@@ -65,7 +65,7 @@ git clone https://github.com/Slagathore/job-finder-v2.git
 cd job-finder-v2
 npm install
 npm run dev      # development (Vite on 5177 + Electron)
-npm test         # 148 tests
+npm test         # 158 tests
 npm run dist     # package for your platform, output in dist-installer/
 ```
 
@@ -88,7 +88,7 @@ There is no server. The app's own docs, database, backups, and exports all live 
 
 ## Architecture
 
-Electron, React, TypeScript, and Vite, with `better-sqlite3` for storage, a provider-agnostic LLM layer (`electron/llm/provider.ts`), and Vitest (148 tests). The full design doc, including the self-extension sandbox, permission matrix, and per-phase build history, is in [PLAN.md](PLAN.md).
+Electron, React, TypeScript, and Vite, with `better-sqlite3` for storage, a provider-agnostic LLM layer (`electron/llm/provider.ts`), and Vitest (158 tests). The full design doc, including the self-extension sandbox, permission matrix, and per-phase build history, is in [PLAN.md](PLAN.md).
 
 ## Platform status
 

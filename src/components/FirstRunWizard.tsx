@@ -45,7 +45,7 @@ export function FirstRunWizard({ onDone }: { onDone: () => void }) {
       canNext: true,
       body: (
         <>
-          <p>A local-first job search command center: scan boards, discover roles that fit your real experience, tailor applications, and track everything — <b>all on your machine, nothing in a cloud</b>.</p>
+          <p>A local-first job search command center: scan boards, discover roles that fit your real experience, tailor applications, and track everything. <b>No cloud required. Nothing has to leave your machine.</b> AI backend is local or cloud, your choice, in Settings.</p>
           <p className="muted small">Three quick questions and you're in. Everything here can be changed later in Settings.</p>
         </>
       ),
