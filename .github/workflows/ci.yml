@@ -1,0 +1,36 @@
+name: CI
+
+# Typecheck + the Vitest suite on every push/PR to main. release.yml only
+# builds on a published release or manual dispatch (and never ran `npm test`),
+# so this is the only workflow that runs before code lands on main.
+#
+# windows-latest on purpose: `npm test` launches the real Electron binary with
+# ELECTRON_RUN_AS_NODE=1 (tests touch safeStorage/app.getPath/etc, so they run
+# inside Electron, not plain Node) and Windows is the platform this app is
+# built and tested on. A bare Linux runner is missing the shared libraries
+# Electron needs just to start (see TODO.md), so ubuntu-latest isn't used here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (typecheck)
+        run: npm run lint
+
+      - name: Test
+        run: npm test
