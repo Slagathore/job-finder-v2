@@ -36,6 +36,21 @@ export function SelfExtendTab() {
       danger: true,
     });
     if (!ok) return;
+    // Extra, separate confirm when the scanner flagged the patch as touching
+    // the self-extension pipeline's own safety code (see scanner.ts's
+    // selfext-guardrail-path rule) — a mistake here weakens every future
+    // patch review, not just this one, so it gets its own explicit warning
+    // instead of blending into the general "Apply patch" prompt.
+    const touchesGuardrail = (proposal?.scan?.findings || []).some((f: any) => f.rule === 'selfext-guardrail-path');
+    if (touchesGuardrail) {
+      const ok2 = await confirmDialog({
+        title: 'This patch touches self-extension safety code',
+        message: 'This patch modifies the self-extension safety code itself (the approval gate, sandbox, or scanner). A mistake here can weaken the review process for every patch after this one. Apply anyway?',
+        confirmLabel: 'I understand, apply anyway',
+        danger: true,
+      });
+      if (!ok2) return;
+    }
     setBusy('Applying + backing up…');
     const r = await window.api.selfext.approve(proposal.id);
     setBusy('');

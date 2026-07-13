@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scanPatch } from '../electron/selfext/scanner';
+import { scanPatch, isSelfExtGuardrailPath } from '../electron/selfext/scanner';
 import { extractPatchSet, validatePatchSet } from '../electron/selfext/patcher';
 
 describe('scanPatch (advisory)', () => {
@@ -18,6 +18,44 @@ describe('scanPatch (advisory)', () => {
   it('returns nothing for benign code', () => {
     const set = { id: 'x', rationale: '', files: [{ path: 'a.ts', mode: 'create' as const, contents: 'export const add = (a:number,b:number)=>a+b;' }] };
     expect(scanPatch(set).findings).toHaveLength(0);
+  });
+});
+
+describe('scanPatch — self-extension guardrail files (H10)', () => {
+  it('flags a patch touching the approval gate (electron/ipc/selfext.ts) as high, by path alone', () => {
+    // Deliberately benign contents — no eval/child_process/etc — to prove this
+    // is caught by PATH, not by the content-pattern rules.
+    const set = { id: 'x', rationale: '', files: [
+      { path: 'electron/ipc/selfext.ts', mode: 'replace' as const, contents: 'export const add = (a: number, b: number) => a + b;' },
+    ] };
+    const { findings, counts } = scanPatch(set);
+    const hit = findings.find(f => f.file === 'electron/ipc/selfext.ts');
+    expect(hit?.rule).toBe('selfext-guardrail-path');
+    expect(hit?.severity).toBe('high');
+    expect(counts.high).toBeGreaterThanOrEqual(1);
+  });
+
+  it('flags any file under electron/selfext/**, including a silent deletion', () => {
+    const set = { id: 'x', rationale: '', files: [
+      { path: 'electron/selfext/sandbox.ts', mode: 'delete' as const },
+    ] };
+    const { findings } = scanPatch(set);
+    expect(findings.some(f => f.rule === 'selfext-guardrail-path' && f.file === 'electron/selfext/sandbox.ts')).toBe(true);
+  });
+
+  it('flags nested paths and backslash-style paths under the guardrail directory', () => {
+    expect(isSelfExtGuardrailPath('electron/selfext/deep/nested.ts')).toBe(true);
+    expect(isSelfExtGuardrailPath('electron\\selfext\\scanner.ts')).toBe(true);
+    expect(isSelfExtGuardrailPath('./electron/ipc/selfext.ts')).toBe(true);
+  });
+
+  it('does not flag unrelated app files or lookalike names', () => {
+    const set = { id: 'x', rationale: '', files: [
+      { path: 'src/tabs/SearchTab.tsx', mode: 'replace' as const, contents: 'export const x = 1;' },
+      { path: 'electron/ipc/experience.ts', mode: 'replace' as const, contents: 'export const y = 1;' },
+    ] };
+    expect(scanPatch(set).findings.some(f => f.rule === 'selfext-guardrail-path')).toBe(false);
+    expect(isSelfExtGuardrailPath('electron/ipc/selfext-utils.ts')).toBe(false);
   });
 });
 
