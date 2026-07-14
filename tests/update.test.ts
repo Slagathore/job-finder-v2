@@ -123,6 +123,8 @@ describe('release channel config (package.json)', () => {
 
   it('pins the Windows publisher so an unsigned or foreign installer is rejected', () => {
     // SIGNING.md: Azure Trusted Signing, cert CN=Charles Chambers.
-    expect(pkg.build.win.publisherName).toContain('Charles Chambers');
+    // electron-builder 26 only accepts publisherName inside signtoolOptions,
+    // not directly under win, so that is where the pin lives.
+    expect(pkg.build.win.signtoolOptions.publisherName).toContain('Charles Chambers');
   });
 });
