@@ -34,6 +34,8 @@ import { killAllChildren } from './selfext/exec';
 import { randomUUID } from 'crypto';
 import { runScan } from './scan/runner';
 import { checkForUpdates, silenceUpdates } from './update/check';
+import { installUpdate } from './update/installer';
+import { selfExtendAvailability } from './selfext/availability';
 import { registerCareerHandlers } from './ipc/career';
 import { runEmbeddings, discover } from './discovery/service';
 import { discoverBoardsFromJobs } from './boards/autodiscover';
@@ -45,6 +47,12 @@ import type { Server } from 'http';
 // test run the BUILT renderer (loadFile) without a Vite dev server.
 const isDev = !app.isPackaged && !process.env.JF_PROD;
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
+
+// Self-extension is a source-tree feature: the LLM writes .ts files and nothing
+// applies until a sandbox clone passes lint + tests. A packaged install ships
+// neither the sources nor the toolchain, so the gate could never pass — the tab
+// is withheld there rather than shipped as a feature that cannot finish.
+const selfExt = selfExtendAvailability(app.isPackaged);
 
 // JF_USER_DATA points the app at an alternate data directory (own DB, hub
 // token, and single-instance lock) — lets tests/screenshots run beside a
@@ -376,6 +384,18 @@ function registerAppHandlers() {
   });
   ipcMain.handle('update:check', () => checkForUpdates());
   ipcMain.handle('update:silence', (_e, mode: 'until-next' | 'forever' | 'clear') => silenceUpdates(mode));
+  // Downloads the signed installer, verifies it (sha512 + Authenticode
+  // publisher), then quits into it. Returns ok only once the handoff happened.
+  ipcMain.handle('update:install', () => installUpdate({
+    onProgress: p => send('update:progress', p),
+    onError: m => send('update:error', m),
+    // The installer needs this process gone; close-to-tray would otherwise veto
+    // the window close and leave the app holding its own files open.
+    beforeQuit: () => { quitting = true; closeToTray = false; },
+  }));
+  // The renderer hides the Self-extend tab where it cannot work (see
+  // selfext/availability.ts) instead of shipping a dead-end feature.
+  ipcMain.handle('app:capabilities', () => ({ selfExtend: selfExt.available, selfExtendReason: selfExt.reason }));
 }
 
 // Crash safety net: log instead of dying silently. Boot failures get a visible
@@ -402,7 +422,7 @@ app.whenReady().then(async () => {
   registerRuleHandlers();
   registerApplyHandlers();
   registerAgentHandlers();
-  registerSelfExtHandlers();
+  if (selfExt.available) registerSelfExtHandlers();
   registerBlocklistHandlers();
   registerPipelineHandlers();
   registerNotificationHandlers();

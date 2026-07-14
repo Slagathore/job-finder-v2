@@ -142,6 +142,17 @@ contextBridge.exposeInMainWorld('api', {
   update: {
     check: () => invoke('update:check'),
     silence: (mode: 'until-next' | 'forever' | 'clear') => invoke('update:silence', mode),
+    install: () => invoke('update:install'),
+    onProgress: (cb: (p: any) => void) => {
+      const l = (_e: any, p: any) => cb(p);
+      ipcRenderer.on('update:progress', l);
+      return () => ipcRenderer.removeListener('update:progress', l);
+    },
+    onError: (cb: (message: string) => void) => {
+      const l = (_e: any, m: string) => cb(m);
+      ipcRenderer.on('update:error', l);
+      return () => ipcRenderer.removeListener('update:error', l);
+    },
   },
   career: {
     insights: () => invoke('career:insights'),
@@ -164,6 +175,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   app: {
     version: () => invoke('app:version'),
+    capabilities: () => invoke('app:capabilities'),
     hubInfo: () => invoke('app:hubInfo'),
     openPath: (p: string) => invoke('app:openPath', p),
     openExternal: (url: string) => invoke('app:openExternal', url),

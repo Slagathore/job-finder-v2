@@ -182,11 +182,20 @@ export interface Api {
     check: () => Promise<{
       available: boolean; latestVersion: string; summary: string;
       emergency: boolean; emergencyMessage: string; repoUrl: string;
+      canInstall: boolean; installBlockedReason: string;
     } | null>;
     silence: (mode: 'until-next' | 'forever' | 'clear') => Promise<boolean>;
+    install: () => Promise<{
+      ok: boolean;
+      stage: 'unsupported' | 'busy' | 'check' | 'download' | 'installing';
+      error?: string; version?: string;
+    }>;
+    onProgress: (cb: (p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => () => void;
+    onError: (cb: (message: string) => void) => () => void;
   };
   app: {
     version: () => Promise<string>;
+    capabilities: () => Promise<{ selfExtend: boolean; selfExtendReason: string }>;
     hubInfo: () => Promise<{ port: number; token: string; url: string }>;
     openPath: (p: string) => Promise<string>;
     openExternal: (url: string) => Promise<string>;

@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { readSettings, writeSetting } from '../ipc/settings';
 import { shouldNotify, isNewer, UpdateStatus } from './policy';
+import { installSupport } from './installer';
 
 const REPO = 'Slagathore/job-finder-v2';
 export const REPO_URL = `https://github.com/${REPO}`;
@@ -48,14 +49,23 @@ export async function fetchUpdateStatus(): Promise<UpdateStatus | null> {
   } catch { return null; }
 }
 
-/** The renderer's on-load check: status if the user should see a banner, else null. */
-export async function checkForUpdates(): Promise<(UpdateStatus & { repoUrl: string }) | null> {
+/** The renderer's on-load check: status if the user should see a banner, else null.
+ *  `canInstall` tells the banner whether to offer a real in-app install or fall
+ *  back to the releases page (source checkouts and the portable exe cannot
+ *  replace themselves — see update/policy.ts). */
+export async function checkForUpdates(): Promise<(UpdateStatus & { repoUrl: string; canInstall: boolean; installBlockedReason: string }) | null> {
   const status = await fetchUpdateStatus();
   lastStatus = status;
   if (!status) return null;
   const silence = String(readSettings().updateSilence ?? '');
   if (!shouldNotify(status, silence)) return null;
-  return { ...status, repoUrl: `${REPO_URL}/releases/latest` };
+  const support = installSupport();
+  return {
+    ...status,
+    repoUrl: `${REPO_URL}/releases/latest`,
+    canInstall: support.ok,
+    installBlockedReason: support.ok ? '' : support.reason,
+  };
 }
 
 export function silenceUpdates(mode: 'until-next' | 'forever' | 'clear'): boolean {

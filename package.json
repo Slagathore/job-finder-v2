@@ -26,6 +26,7 @@
   "dependencies": {
     "better-sqlite3": "^11.3.0",
     "cheerio": "^1.0.0",
+    "electron-updater": "^6.8.9",
     "mammoth": "^1.8.0",
     "ollama": "^0.6.3",
     "pdf-parse": "^1.1.1",
@@ -63,7 +64,17 @@
     "directories": {
       "output": "dist-installer"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Slagathore",
+        "repo": "job-finder-v2"
+      }
+    ],
     "win": {
+      "publisherName": [
+        "Charles Chambers"
+      ],
       "target": [
         {
           "target": "nsis",

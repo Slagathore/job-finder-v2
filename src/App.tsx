@@ -35,6 +35,11 @@ export default function App() {
   const [visited, setVisited] = useState<TabId[]>(['dashboard']);
   const [version, setVersion] = useState('');
   const [update, setUpdate] = useState<Awaited<ReturnType<typeof window.api.update.check>>>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installPct, setInstallPct] = useState(0);
+  const [installMsg, setInstallMsg] = useState('');
+  const [installErr, setInstallErr] = useState('');
+  const [selfExtend, setSelfExtend] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const lastCelebrated = useRef<number>(-1);
 
@@ -66,10 +71,45 @@ export default function App() {
   // On-load update scan. Emergencies come back even when silenced.
   useEffect(() => { window.api.update.check().then(setUpdate).catch(() => {}); }, []);
 
+  // Self-extend is hidden where it cannot work (a packaged install ships no
+  // sources or toolchain, so its sandbox gate could never pass).
+  useEffect(() => {
+    window.api.app.capabilities()
+      .then(c => setSelfExtend(!!c.selfExtend))
+      .catch(() => setSelfExtend(false));
+  }, []);
+
+  // Download progress + any failure the updater reports after the click.
+  useEffect(() => window.api.update.onProgress(p => setInstallPct(Math.round(p.percent))), []);
+  useEffect(() => window.api.update.onError(m => { setInstalling(false); setInstallMsg(''); setInstallErr(m); }), []);
+
   const silence = (mode: 'until-next' | 'forever') => {
     window.api.update.silence(mode).catch(() => {});
     setUpdate(null);
   };
+
+  // "Get update" used to open a browser and call it done. Now it downloads the
+  // signed installer, lets the updater verify it (checksum + Authenticode
+  // publisher), and quits into it. Success is only ever claimed once the
+  // installer has actually been handed off.
+  async function installUpdate() {
+    setInstalling(true); setInstallErr(''); setInstallPct(0);
+    setInstallMsg('Downloading update…');
+    try {
+      const r = await window.api.update.install();
+      if (r.ok) {
+        setInstallMsg('Update verified. Closing Job Finder to run the installer…');
+      } else {
+        setInstalling(false);
+        setInstallMsg('');
+        setInstallErr(r.error ?? 'Update failed, nothing was installed.');
+      }
+    } catch (e: any) {
+      setInstalling(false);
+      setInstallMsg('');
+      setInstallErr(String(e?.message ?? e));
+    }
+  }
 
   // Tray items and desktop-notification clicks deep-link into a tab.
   useEffect(() => window.api.app.onOpenTab(t => setTab(t as TabId)), []);
@@ -97,12 +137,14 @@ export default function App() {
     return () => off();
   }, []);
 
+  const tabs = TABS.filter(t => t.id !== 'selfext' || selfExtend);
+
   return (
     <div className="app">
       <aside className="sidebar">
         <div className="brand">Job&nbsp;Finder<span className="ver">v{version}</span></div>
         <nav>
-          {TABS.map(t => (
+          {tabs.map(t => (
             <button
               key={t.id}
               className={`navbtn ${tab === t.id ? 'active' : ''}`}
@@ -132,25 +174,43 @@ export default function App() {
                 : <><strong>Update available</strong> — v{update.latestVersion} · {update.summary}</>}
             </span>
             <span className="update-actions">
-              <button className="update-get" onClick={() => window.api.app.openExternal(update.repoUrl)}>
-                Get update
-              </button>
-              {!update.emergency && (
+              {update.canInstall ? (
+                <button className="update-get" onClick={installUpdate} disabled={installing}>
+                  {installing ? (installPct > 0 ? `Downloading ${installPct}%` : 'Downloading…') : 'Download & install'}
+                </button>
+              ) : (
+                <button className="update-get" title={update.installBlockedReason}
+                  onClick={() => window.api.app.openExternal(update.repoUrl)}>
+                  Open releases page
+                </button>
+              )}
+              {!update.emergency && !installing && (
                 <>
                   <button onClick={() => silence('until-next')}>Silence until next update</button>
                   <button onClick={() => silence('forever')}>Don't show again</button>
                 </>
               )}
-              <button title={update.emergency ? 'Hide for this session (shows again next launch)' : 'Hide for now'}
-                onClick={() => setUpdate(null)}>✕</button>
+              {!installing && (
+                <button title={update.emergency ? 'Hide for this session (shows again next launch)' : 'Hide for now'}
+                  onClick={() => setUpdate(null)}>✕</button>
+              )}
             </span>
+            {(installMsg || installErr || !update.canInstall) && (
+              <span className="update-status">
+                {installErr
+                  ? <span className="msg-error">⚠️ {installErr}</span>
+                  : installMsg
+                    ? <span className="muted small">{installMsg}</span>
+                    : <span className="muted small">{update.installBlockedReason}</span>}
+              </span>
+            )}
           </div>
         )}
         {/* Tabs lazy-mount on first visit, then stay mounted (hidden) so
             in-progress state — agent chats, search results, scan summaries —
             survives tab switches. Each tab gets its own boundary so a crash
             is isolated and retryable without nuking the others' state. */}
-        {TABS.map(t => visited.includes(t.id) && (
+        {tabs.map(t => visited.includes(t.id) && (
           <div key={t.id} style={t.id === tab ? undefined : { display: 'none' }}>
             <ErrorBoundary>{renderTab(t.id)}</ErrorBoundary>
           </div>

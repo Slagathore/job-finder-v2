@@ -18,6 +18,29 @@ electron-builder custom sign hook (`win.signtoolOptions.sign`) gated behind
 `JF_SIGN=1`. The hook shells to `Invoke-TrustedSigning` with every workaround
 this machine needs baked in (see "Hard-won lessons" below).
 
+## In-app updates depend on this signature
+
+The updater (electron-updater, wired in `electron/update/installer.ts`) refuses to
+install an installer whose Authenticode publisher is not `CN=Charles Chambers`.
+That name comes from `build.win.publisherName` in package.json, which
+electron-builder writes into `app-update.yml` inside the app. So an unsigned
+build cannot update an installed copy in place, by design.
+
+**Every release must include two files or in-app update silently cannot work:**
+
+| File | Why |
+|------|-----|
+| `JobFinder-<version>-Setup.exe` | the thing that gets installed |
+| `latest.yml` | version + sha512 of that exe. The updater reads this first, and verifies the download against the hash in it. |
+
+Both are produced side by side in `dist-installer/` by `npm run dist:signed`.
+Upload them from the same build, never mixed across builds, or the hash check
+fails and the app refuses the update (correctly).
+
+The v1.0.1 release does **not** carry `latest.yml`, so an installed v1.0.1 will
+report that the release is missing its update metadata and point the user at the
+releases page. The next release fixes that by shipping the file.
+
 ## One-time machine setup
 
 ```powershell

@@ -1,6 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { scanPatch, isSelfExtGuardrailPath } from '../electron/selfext/scanner';
 import { extractPatchSet, validatePatchSet } from '../electron/selfext/patcher';
+import { selfExtendAvailability } from '../electron/selfext/availability';
+
+describe('selfExtendAvailability', () => {
+  // A packaged install ships only the compiled bundles inside app.asar: no
+  // sources, no tsconfig, no npm, no vitest. The mandatory sandbox gate (lint +
+  // tests on a clone) therefore can never pass there, so the feature is withheld
+  // instead of being shipped as a tab that can never finish.
+  it('is off in a packaged build, with a reason the UI can show', () => {
+    const a = selfExtendAvailability(true);
+    expect(a.available).toBe(false);
+    expect(a.reason).toMatch(/source checkout/i);
+  });
+
+  it('is on when running from a source checkout', () => {
+    expect(selfExtendAvailability(false)).toEqual({ available: true, reason: '' });
+  });
+});
 
 describe('scanPatch (advisory)', () => {
   it('flags eval / child_process / fs-delete with severities', () => {

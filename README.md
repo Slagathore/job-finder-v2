@@ -88,7 +88,11 @@ There is no server. The app's own docs, database, backups, and exports all live 
 
 ## Architecture
 
-Electron, React, TypeScript, and Vite, with `better-sqlite3` for storage, a provider-agnostic LLM layer (`electron/llm/provider.ts`), and Vitest (158 tests). The full design doc, including the self-extension sandbox, permission matrix, and per-phase build history, is in [PLAN.md](PLAN.md).
+Electron, React, TypeScript, and Vite, with `better-sqlite3` for storage, a provider-agnostic LLM layer (`electron/llm/provider.ts`), and Vitest (176 tests). The full design doc, including the self-extension sandbox, permission matrix, and per-phase build history, is in [PLAN.md](PLAN.md).
+
+Updates install themselves: the app checks the GitHub releases feed, and "Download & install" fetches the signed installer, checks its hash and its Authenticode publisher, then hands off to it and exits. Your data is never in the install directory, so an update cannot touch it.
+
+Self-extension (the tab where the LLM writes new features into the app) is a source-checkout feature and does not appear in the installed build. It cannot: nothing is applied until a sandbox clone passes lint and the test suite, and an installed copy ships compiled bundles rather than the source tree and toolchain that gate needs. Run it from a clone (`npm run dev`) to use it.
 
 ## Platform status
 

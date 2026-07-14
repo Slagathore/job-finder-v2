@@ -66,9 +66,14 @@ nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 
 .update-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 14px; padding: 9px 12px; border-radius: 10px;
   background: var(--panel); border: 1px solid var(--accent); font-size: 13px;
 }
+/* Download progress, a blocked-install explanation, or a failure — the banner
+   never claims an install happened, so this line carries the truth. */
+.update-status { flex-basis: 100%; font-size: 12px; }
+.update-actions button:disabled { opacity: 0.65; cursor: default; }
 .update-banner.urgent { border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--panel)); }
 .update-banner .update-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .update-banner.urgent .update-text { white-space: normal; }
