@@ -72,9 +72,6 @@
       }
     ],
     "win": {
-      "publisherName": [
-        "Charles Chambers"
-      ],
       "target": [
         {
           "target": "nsis",
@@ -93,7 +90,10 @@
         "signingHashAlgorithms": [
           "sha256"
         ],
-        "sign": "./scripts/azure-sign.js"
+        "sign": "./scripts/azure-sign.js",
+        "publisherName": [
+          "Charles Chambers"
+        ]
       }
     },
     "nsis": {
