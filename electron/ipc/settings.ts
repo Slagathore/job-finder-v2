@@ -3,7 +3,7 @@ import { getDb } from './db';
 
 // Secrets encrypted at rest via the OS keychain (PLAN.md §2). Applied across all
 // write paths (settings:set, ensureHubToken, gmail.saveSetting) + migrated on boot.
-const SECRET_KEYS = new Set(['anthropicApiKey', 'gmailClientSecret', 'gmailRefreshToken']);
+const SECRET_KEYS = new Set(['anthropicApiKey', 'gmailClientSecret', 'gmailRefreshToken', 'githubToken']);
 
 function encryptionReady(): boolean {
   try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
@@ -99,8 +99,11 @@ export const DEFAULTS = {
   // ── Discovery / ranking (§6.4) ──────────────────────────────────────
   payWeight: 1.0,                    // soft booster
   wfhWeight: 1.0,
-  payMin: 0,                         // 0 = no minimum filter
+  payMin: 0,                         // 0 = no minimum filter, also the grader's pay floor
   payMinHides: false,                // false = grey-out, true = hide
+  payTarget: 0,                      // what the search is aiming at; 0 = not set
+  preferredWorkMode: '',             // '' | 'remote' | 'hybrid' | 'onsite' — context for the fit grader
+  autoGradeTopN: 10,                 // LLM-grade this many top search hits automatically; 0 = off
 
   // ── ATS scan title filter (§6.6) — empty = keep everything ──────────
   titleFilterPositive: [] as string[],
@@ -130,6 +133,11 @@ export const DEFAULTS = {
   gmailClientSecret: '',
   gmailRefreshToken: '',     // set after OAuth
   gmailEmail: '',
+
+  // ── Project ingestion (GitHub / folder / web app) ───────────────────
+  // Fallback credential only: the GitHub CLI's own token is preferred, and
+  // this is what a pasted personal access token lands in. Encrypted at rest.
+  githubToken: '',
 
   // ── Applying (§6.1) ─────────────────────────────────────────────────
   autoSubmitWhenComplete: false,  // click Submit only if no required field is left empty

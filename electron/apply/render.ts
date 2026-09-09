@@ -42,7 +42,7 @@ export function renderCoverHtml(c: Candidate, job: { title: string; company: str
   const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const body = (t.coverLetter || '').split(/\n{2,}/).map(p => `<p>${esc(p)}</p>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><style>${STYLE}</style></head><body>
-    <div class="contact">${esc(c.name || 'Your Name')} — ${contactLine(c)}</div>
+    <div class="contact">${esc(c.name || 'Your Name')}${contactLine(c) ? `, ${contactLine(c)}` : ''}</div>
     <p>${esc(date)}</p>
     <p>Re: ${esc(job.title)} at ${esc(job.company)}</p>
     ${body}

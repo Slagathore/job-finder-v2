@@ -9,7 +9,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const THRESHOLD: Record<string, number> = { applied: 7, responded: 5, interview: 3 };
 const ACTION: Record<string, string> = {
   applied: 'Send a brief follow-up note',
-  responded: 'Nudge — ask about timeline / next steps',
+  responded: 'Nudge: ask about timeline / next steps',
   interview: 'Send a thank-you + ask about next steps',
 };
 

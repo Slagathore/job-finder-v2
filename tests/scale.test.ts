@@ -10,15 +10,61 @@ const job = (o: Partial<ScanJob>): ScanJob => ({
 const W = { payWeight: 1, wfhWeight: 1 };
 
 describe('rankCandidates', () => {
-  it('orders by similarity to the query vector + grades', () => {
+  it('orders by similarity to the query vector, and never invents a grade', () => {
     const r = rankCandidates({
       jobs: [job({ id: 1, vec: [1, 0] }), job({ id: 2, title: 'Cook', vec: [0, 1] })],
       itemVecs: [], queryVec: [1, 0], weights: W, limit: 10,
     });
     expect(r.results.map(x => x.id)).toEqual([1, 2]);
     expect(r.results[0].sim).toBeCloseTo(1, 6);
-    expect(r.results[0].fit_grade).toBe('A');
+    // Similarity orders the list; it is NOT turned into a letter any more.
+    expect(r.results[0].fit_grade).toBeNull();
     expect(r.results[0].vec).toBeUndefined();   // vector stripped from output
+  });
+
+  it('surfaces the cached LLM grade and nothing else', () => {
+    const r = rankCandidates({
+      jobs: [job({ id: 1, fit_score: 'c' }), job({ id: 2, fit_score: 'not a grade' })],
+      itemVecs: [], queryVec: null, weights: W,
+    });
+    const by = new Map(r.results.map(x => [x.id, x.fit_grade]));
+    expect(by.get(1)).toBe('C');
+    expect(by.get(2)).toBeNull();
+  });
+
+  it('hybrid fusion lets a lexical-only match beat a dense-only one it outranks', () => {
+    // Job 2 has no vector but is the only exact lexical hit; job 1 is a weak
+    // dense hit. RRF puts the rank-1 lexical hit ahead of the rank-1 dense hit
+    // only on a tie, so check both make the list and the lexical one scores.
+    const jobs = [
+      job({ id: 1, title: 'Line Cook', description: 'kitchen work', vec: [1, 0] }),
+      job({ id: 2, title: 'Kubernetes Platform Engineer', description: 'kubernetes terraform', vec: null }),
+    ];
+    const r = rankCandidates({ jobs, itemVecs: [], queryVec: [0.9, 0.1], weights: W, tags: 'kubernetes terraform' });
+    const lex = new Map(r.results.map(x => [x.id, x.lex]));
+    expect(lex.get(2)).toBeGreaterThan(0);
+    expect(lex.get(1)).toBe(0);
+    expect(r.results.map(x => x.id)).toContain(2);
+  });
+
+  it('degrades to the dense ranking with no query text, and to lexical with no vectors', () => {
+    const jobs = [job({ id: 1, vec: [1, 0] }), job({ id: 2, title: 'Cook', vec: [0, 1] })];
+    const dense = rankCandidates({ jobs, itemVecs: [], queryVec: [1, 0], weights: W });
+    expect(dense.results.map(x => x.id)).toEqual([1, 2]);
+    expect(dense.results.every(x => x.lex === 0)).toBe(true);
+
+    const novec = [job({ id: 1, title: 'Data Engineer' }), job({ id: 2, title: 'Pastry Chef' })];
+    const lexOnly = rankCandidates({ jobs: novec, itemVecs: [], queryVec: null, weights: W, tags: 'data engineer' });
+    expect(lexOnly.results[0].id).toBe(1);
+    expect(lexOnly.results.every(x => x.sim === 0)).toBe(true);
+  });
+
+  it('still returns filter-only results with no query and no vectors at all', () => {
+    const jobs = [job({ id: 1 }), job({ id: 2, title: 'Cook' })];
+    const r = rankCandidates({ jobs, itemVecs: [], queryVec: null, weights: W });
+    expect(r.total).toBe(2);
+    expect(r.results.length).toBe(2);
+    expect(r.results.every(x => x.fit_grade === null)).toBe(true);
   });
 
   it('applies work-mode, keyword and pay filters', () => {

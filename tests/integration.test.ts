@@ -94,6 +94,12 @@ import { registerBlocklistHandlers } from '../electron/ipc/blocklist';
 import { registerSelfExtHandlers } from '../electron/ipc/selfext';
 import { saveProposal, setSandboxResult } from '../electron/selfext/store';
 import type { PatchSet } from '../electron/selfext/patcher';
+import {
+  listConversations, createConversation, getConversation, appendMessage, saveResults,
+  saveStepResult, deleteConversation, historyFor,
+} from '../electron/agent/conversations';
+import { insertItemsDeduped } from '../electron/experience/store';
+import { correctHostileBoards } from '../electron/ipc/boards';
 
 /** Close whatever db is open, point app.getPath('userData') at a fresh temp
  *  dir, and re-run initDb() — every test gets its own real, isolated
@@ -278,5 +284,203 @@ describe('selfext approve gate (electron/ipc/selfext.ts) — a patch must pass s
     const approve = mockState.ipcHandlers.get('selfext:approve')!;
     const result = await approve({}, 999999);
     expect(result.error).toMatch(/not found/i);
+  });
+});
+
+describe('agent conversations (electron/agent/conversations.ts) - real sqlite persistence', () => {
+  beforeEach(freshDb);
+
+  it('titles a new conversation from the first message and lists it', () => {
+    const id = createConversation('agent', 'scan all boards then discover my best fits');
+    appendMessage(id, { role: 'user', content: 'scan all boards then discover my best fits' });
+    const list = listConversations();
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe(id);
+    expect(list[0].title).toContain('scan all boards');
+    expect(list[0].mode).toBe('agent');
+    expect(list[0].message_count).toBe(1);
+  });
+
+  it('lists newest first by last activity', () => {
+    const a = createConversation('agent', 'first thread');
+    const b = createConversation('interview', 'second thread');
+    // Newest-first is by LAST ACTIVITY, so a turn on the older thread lifts it
+    // above the newer one. Real turns are seconds apart; the clock is pushed
+    // forward here so the assertion does not hinge on same-millisecond writes.
+    const realNow = Date.now;
+    Date.now = () => realNow() + 5_000;
+    try {
+      appendMessage(a, { role: 'user', content: 'a newer turn' });
+    } finally {
+      Date.now = realNow;
+    }
+    const list = listConversations();
+    expect(list.map(c => c.id)).toEqual([a, b]);
+    expect(list.find(c => c.id === b)!.mode).toBe('interview');
+  });
+
+  it('redraws a plan and its step results after a restart', () => {
+    const id = createConversation('agent', 'scan the boards');
+    appendMessage(id, { role: 'user', content: 'scan the boards' });
+    const plan = { summary: 'scan', steps: [{ tool: 'scanBoards', args: {} }, { tool: 'openTab', args: { tab: 'search' } }] };
+    const mid = appendMessage(id, { role: 'assistant', content: 'scan', plan });
+    saveResults(mid, [
+      { tool: 'scanBoards', ok: false, needsConfirm: true, summary: 'awaiting your confirmation (harvest)', args: {} },
+      { tool: 'openTab', ok: true, summary: 'open search', openTab: 'search' },
+    ]);
+    saveStepResult(mid, 0, { tool: 'scanBoards', ok: true, summary: '+3 new' });
+
+    // Close and reopen the same on-disk database: an app restart.
+    closeDb();
+    initDb();
+
+    const conv = getConversation(id)!;
+    expect(conv.title).toContain('scan the boards');
+    expect(conv.messages.map(m => m.role)).toEqual(['user', 'assistant']);
+    expect(conv.messages[1].plan.steps[0].tool).toBe('scanBoards');
+    expect(conv.messages[1].results![0]).toMatchObject({ tool: 'scanBoards', ok: true, summary: '+3 new' });
+    expect(conv.messages[1].results![1]).toMatchObject({ tool: 'openTab', openTab: 'search' });
+  });
+
+  it('ignores an out of range step index instead of corrupting the row', () => {
+    const id = createConversation('agent', 'x');
+    const mid = appendMessage(id, { role: 'assistant', content: 'x' });
+    saveResults(mid, [{ tool: 'note', ok: true, summary: 'hi' }]);
+    saveStepResult(mid, 5, { tool: 'evil', ok: true, summary: 'nope' });
+    expect(getConversation(id)!.messages[0].results).toHaveLength(1);
+  });
+
+  it('bounds the history sent to the model to the last few turns', () => {
+    const id = createConversation('agent', 'turn 0');
+    for (let i = 0; i < 20; i++) {
+      appendMessage(id, { role: i % 2 === 0 ? 'user' : 'assistant', content: `turn ${i}` });
+    }
+    const h = historyFor(id);
+    expect(h).toHaveLength(6);
+    expect(h[0].content).toBe('turn 14');
+    expect(h[5].content).toBe('turn 19');
+    expect(getConversation(id)!.messages).toHaveLength(20);
+  });
+
+  it('drops empty turns out of the model history', () => {
+    const id = createConversation('agent', 'hello');
+    appendMessage(id, { role: 'user', content: 'hello' });
+    appendMessage(id, { role: 'assistant', content: '   ' });
+    expect(historyFor(id).map(m => m.content)).toEqual(['hello']);
+  });
+
+  it('deletes a conversation and its messages', () => {
+    const id = createConversation('agent', 'temporary');
+    appendMessage(id, { role: 'user', content: 'temporary' });
+    deleteConversation(id);
+    expect(getConversation(id)).toBeNull();
+    expect(listConversations()).toHaveLength(0);
+    expect((getDb().prepare('SELECT COUNT(*) n FROM agent_messages').get() as any).n).toBe(0);
+  });
+});
+
+describe('insertItemsDeduped supersedeSourceRef (electron/experience/store.ts) — real sqlite', () => {
+  beforeEach(freshDb);
+
+  it('a repeat digest of the same project replaces its previous pass instead of duplicating it', () => {
+    insertItemsDeduped(
+      [{ kind: 'project', text: 'Built a medium-pass summary of sporespore.', source_ref: 'github:Slagathore/sporespore' } as any],
+      { supersedeSourceRef: 'github:Slagathore/sporespore' }
+    );
+    insertItemsDeduped(
+      [{ kind: 'project', text: 'Built a much richer deep-dive summary of sporespore.', source_ref: 'github:Slagathore/sporespore' } as any],
+      { supersedeSourceRef: 'github:Slagathore/sporespore' }
+    );
+
+    const rows = getDb().prepare(
+      "SELECT text, source_ref FROM experience_items WHERE kind = 'project'"
+    ).all() as any[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text).toBe('Built a much richer deep-dive summary of sporespore.');
+  });
+
+  it('does NOT delete an item that merged with other provenance (a pipe-joined source_ref)', () => {
+    // A resume bullet lands first.
+    insertItemsDeduped([{
+      kind: 'accomplishment', text: 'Shipped a full-stack meta tracker for a trading card game.',
+      source_ref: 'resume:pasted',
+    } as any]);
+    // A repo digest for the same project comes in with near-identical wording and merges
+    // into that row, so its source_ref becomes pipe-joined (resume ref + repo ref).
+    insertItemsDeduped(
+      [{
+        kind: 'accomplishment', text: 'Shipped a full-stack meta tracker for a trading card game with a Discord bot.',
+        source_ref: 'github:Slagathore/sporespore',
+      } as any],
+      { supersedeSourceRef: 'github:Slagathore/sporespore' }
+    );
+    const merged = getDb().prepare(
+      "SELECT id, source_ref FROM experience_items WHERE kind = 'accomplishment'"
+    ).get() as any;
+    expect(merged.source_ref).toContain('github:Slagathore/sporespore');
+    expect(merged.source_ref.split('|').length).toBeGreaterThan(1);
+
+    // Re-digesting the SAME repo again must not destroy that merged row, since it
+    // still carries the resume's provenance too, not just the repo's.
+    insertItemsDeduped(
+      [{ kind: 'project', text: 'Unrelated new project-kind item from the re-digest.' } as any],
+      { supersedeSourceRef: 'github:Slagathore/sporespore' }
+    );
+    const stillThere = getDb().prepare('SELECT id FROM experience_items WHERE id = ?').get(merged.id);
+    expect(stillThere).toBeTruthy();
+  });
+
+  it('a failed insert inside the batch rolls back the delete too (all or nothing)', () => {
+    insertItemsDeduped(
+      [{ kind: 'project', text: 'Original pass.', source_ref: 'github:Slagathore/sporespore' } as any],
+      { supersedeSourceRef: 'github:Slagathore/sporespore' }
+    );
+    // kind is NOT NULL in the schema; omitting it makes the second row's insert
+    // throw partway through the batch.
+    expect(() => insertItemsDeduped(
+      [{ text: 'Missing its kind, so this insert throws.' } as any],
+      { supersedeSourceRef: 'github:Slagathore/sporespore' }
+    )).toThrow();
+
+    // The whole transaction (delete + inserts) must have rolled back, so the
+    // original pass is still there rather than the user ending up with neither.
+    const rows = getDb().prepare("SELECT text FROM experience_items WHERE kind = 'project'").all() as any[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text).toBe('Original pass.');
+  });
+});
+
+describe('correctHostileBoards (electron/ipc/boards.ts) — real sqlite', () => {
+  beforeEach(freshDb);
+
+  it('fixes an existing row already sitting in the bad needs-adapter/stale state', () => {
+    const now = Date.now();
+    const info = getDb().prepare(
+      `INSERT INTO boards (name, type, url, enabled, ingress, status, adapter_stale, created_at)
+       VALUES ('indeed', 'ats', 'www.indeed.com', 1, 'dom', 'needs-adapter', 1, ?)`
+    ).run(now);
+    const id = Number(info.lastInsertRowid);
+
+    const fixed = correctHostileBoards();
+
+    expect(fixed).toBe(1);
+    const row = getDb().prepare('SELECT ingress, status, adapter_stale FROM boards WHERE id = ?').get(id) as any;
+    expect(row.ingress).toBe('extension');
+    expect(row.status).toBe('harvested-by-extension');
+    expect(row.adapter_stale).toBe(0);
+  });
+
+  it('leaves an ordinary ATS board untouched', () => {
+    const now = Date.now();
+    const info = getDb().prepare(
+      `INSERT INTO boards (name, type, url, enabled, ingress, status, created_at)
+       VALUES ('Acme', 'ats', 'https://boards.greenhouse.io/acme', 1, 'api', 'greenhouse', ?)`
+    ).run(now);
+    const id = Number(info.lastInsertRowid);
+
+    expect(correctHostileBoards()).toBe(0);
+    const row = getDb().prepare('SELECT ingress, status FROM boards WHERE id = ?').get(id) as any;
+    expect(row.ingress).toBe('api');
+    expect(row.status).toBe('greenhouse');
   });
 });

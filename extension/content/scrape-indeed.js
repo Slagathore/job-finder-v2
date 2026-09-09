@@ -9,6 +9,14 @@ function jfText(el, sel) {
   return (n.getAttribute('title') || n.textContent || '').trim();
 }
 
+// Last-resort posting-age grab: Indeed moves the date node around, so fall back
+// to scanning the card's own text for a relative-age phrase.
+function jfMatchAgeText(el) {
+  const t = (el.innerText || '').replace(/\s+/g, ' ');
+  const m = /(just posted|today|yesterday|(?:posted|active)?\s*\d+\+?\s*(?:hour|day|week|month)s?\s*ago)/i.exec(t);
+  return m ? m[1].trim() : '';
+}
+
 const jfIsResultsPage = () => /^\/(jobs|q-)/.test(location.pathname);
 const jfIsViewJob = () => location.pathname.startsWith('/viewjob');
 
@@ -27,9 +35,15 @@ function scrapeIndeedCards() {
       jfText(c, '[data-testid="attribute_snippet_testid"]') || jfText(c, '.salary-snippet-container') ||
       jfText(c, '.estimated-salary') || jfText(c, '[class*="salary"]');
     if (!title) continue;
+    // Posting age: Indeed shows relative text ("Posted 3 days ago", "Active 30+
+    // days ago"). The hub parses it into a date and derives a soft expiry.
+    const postedText =
+      jfText(c, '[data-testid="myJobsStateDate"]') || jfText(c, '.date') ||
+      jfText(c, '[class*="jobPostingDate"]') || jfMatchAgeText(c);
     out.push({
       title, company, location: location_,
       salary: /\$/.test(salaryRaw) ? salaryRaw : '',
+      postedText,
       url: 'https://www.indeed.com/viewjob?jk=' + jk, source: 'indeed-ext',
     });
   }

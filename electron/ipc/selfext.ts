@@ -43,7 +43,7 @@ export function registerSelfExtHandlers() {
   ipcMain.handle('selfext:approve', (_e, id: number) => {
     const p = getProposal(id);
     if (!p) return { error: 'Proposal not found.' };
-    if (!p.sandbox?.ok) return { error: 'Sandbox checks have not passed for this proposal — run “Sandbox” (lint + tests) first.' };
+    if (!p.sandbox?.ok) return { error: 'Sandbox checks have not passed for this proposal. Run “Sandbox” (lint + tests) first.' };
     return applyProposal(id);
   });
   ipcMain.handle('selfext:reject', (_e, id: number) => { setStatus(id, 'rejected'); return { ok: true }; });

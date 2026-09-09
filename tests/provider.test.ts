@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { providerChain, generate } from '../electron/llm/provider';
+import { providerChain, generate, expandedBudget, requestTimeoutMs } from '../electron/llm/provider';
 
 const base = {
   primaryModel: 'kimi-k2.7-code:cloud',
@@ -106,5 +106,35 @@ describe('thinking wiring', () => {
     expect(r2.text).toBe('answer');
     expect(r2.thinking).toBe('secret reasoning');
     expect(bodies[1].think).toBe('high');
+  });
+});
+
+describe('expandedBudget (retry after an empty truncated response)', () => {
+  it('lifts a small budget to a usable floor', () => {
+    // A thinking model can burn 8000 tokens on reasoning and emit nothing, so the
+    // retry has to be a real jump, not a nudge.
+    expect(expandedBudget(900)).toBe(12_000);
+    expect(expandedBudget(undefined)).toBe(12_000);
+  });
+  it('triples a already-large budget', () => {
+    expect(expandedBudget(9000)).toBe(27_000);
+  });
+  it('never exceeds the ceiling', () => {
+    expect(expandedBudget(30_000)).toBe(32_000);
+    expect(expandedBudget(100_000)).toBe(32_000);
+  });
+});
+
+describe('requestTimeoutMs (scaled to the requested output)', () => {
+  it('keeps a short cap for small calls so a hung server fails fast', () => {
+    expect(requestTimeoutMs(200)).toBe(120_000);
+    expect(requestTimeoutMs(undefined)).toBe(120_000);
+  });
+  it('gives a large structured call the minutes it genuinely needs', () => {
+    // The 30k portfolio review really does run past the old flat two minute cap.
+    expect(requestTimeoutMs(30_000)).toBe(600_000);
+  });
+  it('never waits forever', () => {
+    expect(requestTimeoutMs(10_000_000)).toBe(900_000);
   });
 });

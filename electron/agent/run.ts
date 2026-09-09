@@ -1,7 +1,11 @@
-import { generate, type ChatMessage } from '../llm/provider';
+import { generate } from '../llm/provider';
 import { getDb } from '../ipc/db';
 import { readSettings } from '../ipc/settings';
-import { buildPlannerPrompt, parsePlan, type PlanStep, type ParsedPlan } from './planner';
+import { buildPromptForMode, parseForMode, type PlanStep, type ParsedPlan } from './planner';
+import { normalizeMode, pickMentionedJobs, type AgentMode } from './interview';
+import {
+  appendMessage, createConversation, historyFor, saveResults, saveStepResult,
+} from './conversations';
 import { capabilityOf, tabFor } from './tools';
 import { appendAudit } from './audit';
 import { search, discover, gradeJob } from '../discovery/service';
@@ -12,7 +16,7 @@ import { learnSite } from '../boards/learn';
 import { saveAdapter } from '../boards/store';
 import { detectApi } from '../scan/ats';
 import { digestSource } from '../experience/digest';
-import { insertItems, getProfile, getRoleFits, saveProfile, replaceRoleFits } from '../experience/store';
+import { insertItemsDeduped, getProfile, getRoleFits, saveProfile, replaceRoleFits } from '../experience/store';
 import { inferProfileAndRoles } from '../experience/profile';
 
 export interface StepResult {
@@ -39,6 +43,47 @@ function loadContext(): string {
   ].join('\n');
 }
 
+/**
+ * Context for interview prep mode: the jobs already on disk (so the coach can
+ * find the posting itself), the profile, the experience line items it will
+ * evaluate against, and the saved story bank so it reuses stories instead of
+ * inventing new ones. Reuses the same story_bank the Pipeline prep button fills.
+ */
+function loadInterviewContext(haystack: string): string {
+  const db = getDb();
+  const profile = getProfile();
+  const roles = getRoleFits().slice(0, 8).map((r: any) => r.role_family);
+  const jobs = db.prepare(
+    'SELECT id, title, company, location_raw, work_mode, status, fit_score FROM jobs ORDER BY starred DESC, first_seen DESC LIMIT 60'
+  ).all() as any[];
+  const jobLines = jobs.map(j =>
+    `- job ${j.id}: ${j.title ?? '(untitled)'} at ${j.company ?? '(unknown company)'}` +
+    `${j.location_raw ? `, ${j.location_raw}` : ''}${j.work_mode ? `, ${j.work_mode}` : ''}` +
+    `${j.fit_score ? `, fit ${j.fit_score}` : ''}, status ${j.status ?? 'discovered'}`);
+
+  // If their words point at a posting we already have, hand over its text.
+  const picked = pickMentionedJobs(haystack, jobs, 2);
+  const details = picked.map(p => {
+    const full = db.prepare('SELECT title, company, description FROM jobs WHERE id = ?').get(p.id) as any;
+    const body = String(full?.description ?? '').slice(0, 3500) || '(no description saved)';
+    return `--- job ${p.id}: ${full?.title ?? ''} at ${full?.company ?? ''} ---\n${body}`;
+  });
+
+  const items = (db.prepare('SELECT kind, text FROM experience_items LIMIT 40').all() as any[])
+    .map(i => `- (${i.kind}) ${i.text}`);
+  const stories = (db.prepare('SELECT prompt, story FROM story_bank ORDER BY COALESCE(last_used, created_at) DESC LIMIT 12').all() as any[])
+    .map(s => `- Q: ${s.prompt}\n  A: ${s.story}`);
+
+  return [
+    `PROFILE: ${profile?.narrative ?? 'not yet inferred'} (seniority ${profile?.seniority ?? 'unknown'}, years ${profile?.total_yoe ?? 'unknown'}).`,
+    `ROLE FAMILIES: ${roles.join(', ') || 'none'}.`,
+    `JOBS IN THE APP (${jobs.length}):\n${jobLines.join('\n') || '(none saved yet)'}`,
+    details.length ? `POSTINGS THAT LOOK LIKE A MATCH FOR WHAT THEY SAID:\n${details.join('\n\n')}` : '',
+    `EXPERIENCE LINE ITEMS:\n${items.join('\n') || '(none digested yet)'}`,
+    stories.length ? `SAVED STORIES (reuse where they fit):\n${stories.join('\n')}` : '',
+  ].filter(Boolean).join('\n\n');
+}
+
 // ── Permissions ──────────────────────────────────────────────────────────────
 
 export function getPermissions(): { capability: string; mode: string }[] {
@@ -60,13 +105,59 @@ export function listMemory(): any[] {
 
 // ── Planning ─────────────────────────────────────────────────────────────────
 
-export async function planMessage(message: string, history: ChatMessage[] = []): Promise<ParsedPlan & { raw?: string }> {
+export interface PlanRequest {
+  message: string;
+  conversationId?: number | null;
+  mode?: AgentMode | string;
+}
+
+export interface PlanResponse extends ParsedPlan {
+  conversationId: number;
+  messageId: number;
+  raw?: string;
+}
+
+/**
+ * One console turn. The user message and the assistant reply are both written to
+ * the conversation on disk, and the history replayed to the model comes back out
+ * of that conversation, bounded to the last few turns.
+ */
+export async function planMessage(req: PlanRequest): Promise<PlanResponse> {
+  const mode = normalizeMode(req.mode);
+  const message = String(req.message ?? '');
+  const conversationId = req.conversationId && Number(req.conversationId) > 0
+    ? Number(req.conversationId)
+    : createConversation(mode, message);
+
+  const history = historyFor(conversationId);
+  appendMessage(conversationId, { role: 'user', content: message });
+
+  let parsed: ParsedPlan & { raw?: string };
   try {
-    const r = await generate(readSettings(), buildPlannerPrompt(message, loadContext(), history), { temperature: 0.3, maxTokens: 2500 });
-    return { ...parsePlan(r.text), raw: r.text };
+    const context = mode === 'interview'
+      ? loadInterviewContext([...history.filter(h => h.role === 'user').map(h => h.content), message].join(' '))
+      : loadContext();
+    const r = await generate(readSettings(), buildPromptForMode(mode, message, context, history), {
+      temperature: mode === 'interview' ? 0.6 : 0.3,
+      maxTokens: mode === 'interview' ? 3500 : 2500,
+    });
+    parsed = { ...parseForMode(mode, r.text), raw: r.text };
   } catch (e: any) {
-    return { intent: 'malformed', error: e?.message ?? String(e) };
+    parsed = { intent: 'malformed', error: e?.message ?? String(e) };
   }
+
+  const content = parsed.intent === 'explanation'
+    ? (parsed.explanation ?? '')
+    : parsed.intent === 'valid'
+      ? (parsed.plan?.summary || 'Here is a plan:')
+      : `Sorry, that did not work. ${parsed.error ?? 'Could not form a plan.'}`;
+  const messageId = appendMessage(conversationId, {
+    role: 'assistant',
+    content,
+    plan: parsed.intent === 'valid' ? parsed.plan : undefined,
+  });
+
+  return { ...parsed, conversationId, messageId };
 }
 
 // ── Execution ────────────────────────────────────────────────────────────────
@@ -125,8 +216,8 @@ async function executeStep(step: PlanStep, confirmed = false): Promise<StepResul
     }
     case 'digestText': {
       const items = await digestSource(readSettings(), a.text ?? '', 'agent');
-      const added = insertItems(items.map(i => ({ ...i, source_ref: 'agent' } as any)));
-      return { tool: step.tool, ok: true, summary: `+${added} line items`, openTab: tab };
+      const { added, merged } = insertItemsDeduped(items.map(i => ({ ...i, source_ref: 'agent' } as any)));
+      return { tool: step.tool, ok: true, summary: `+${added} line items${merged ? `, ${merged} merged into existing` : ''}`, openTab: tab };
     }
     case 'inferProfile': {
       const items = db.prepare('SELECT kind, text, role, employer, start_date, end_date, metrics, seniority_signal FROM experience_items').all() as any[];
@@ -160,17 +251,23 @@ async function executeStep(step: PlanStep, confirmed = false): Promise<StepResul
   }
 }
 
-export async function runPlan(steps: PlanStep[]): Promise<{ results: StepResult[] }> {
+export async function runPlan(steps: PlanStep[], messageId?: number | null): Promise<{ results: StepResult[] }> {
   const results: StepResult[] = [];
   for (const step of steps) {
     try { results.push(await executeStep(step)); }
     catch (e: any) { results.push({ tool: step.tool, ok: false, summary: '', error: e?.message ?? String(e) }); }
   }
+  if (messageId) { try { saveResults(Number(messageId), results); } catch { /* history is best-effort */ } }
   return { results };
 }
 
 /** Execute a single confirm-gated step after the user approves it. */
-export async function runStep(step: PlanStep): Promise<StepResult> {
-  try { return await executeStep(step, true); }
-  catch (e: any) { return { tool: step.tool, ok: false, summary: '', error: e?.message ?? String(e) }; }
+export async function runStep(step: PlanStep, messageId?: number | null, index?: number): Promise<StepResult> {
+  let out: StepResult;
+  try { out = await executeStep(step, true); }
+  catch (e: any) { out = { tool: step.tool, ok: false, summary: '', error: e?.message ?? String(e) }; }
+  if (messageId && typeof index === 'number') {
+    try { saveStepResult(Number(messageId), index, out); } catch { /* history is best-effort */ }
+  }
+  return out;
 }

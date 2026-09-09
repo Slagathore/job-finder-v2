@@ -28,7 +28,7 @@ export function registerExportHandlers() {
       body{font:13px/1.5 -apple-system,Segoe UI,sans-serif;margin:28px;color:#1a1a1a}
       h1{font-size:20px} table{border-collapse:collapse;width:100%} th,td{border-bottom:1px solid #ddd;padding:6px 9px;text-align:left}
       th{background:#f4f6fb} a{color:#3a6fe0;text-decoration:none}</style>
-      <h1>Job Finder — pipeline (${rows.length})</h1><p>${new Date().toLocaleString()}</p><table>
+      <h1>Job Finder: pipeline (${rows.length})</h1><p>${new Date().toLocaleString()}</p><table>
       <tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>
       ${rows.map(r => `<tr>${cols.map(c =>
         c === 'url' ? `<td>${safeHref(r.url) ? `<a href="${safeHref(r.url)}">link</a>` : ''}</td>`

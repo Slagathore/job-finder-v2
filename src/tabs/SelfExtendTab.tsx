@@ -97,7 +97,7 @@ export function SelfExtendTab() {
           {proposal.scan?.findings?.length > 0 && (
             <ul className="findings">
               {proposal.scan.findings.slice(0, 12).map((f: any, i: number) => (
-                <li key={i}><span className={`sev-${f.severity}`}>{f.severity}</span> {f.rule} — {f.file}:{f.line} <code>{f.snippet}</code></li>
+                <li key={i}><span className={`sev-${f.severity}`}>{f.severity}</span> {f.rule}: {f.file}:{f.line} <code>{f.snippet}</code></li>
               ))}
             </ul>
           )}

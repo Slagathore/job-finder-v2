@@ -11,8 +11,9 @@ import { rankCandidates, type ScanJob } from './scan-core';
 
 interface Msg { dbPath: string; params: any; queryVec: number[] | null; weights: any; }
 
+// Keep in sync with SCAN_COLUMNS in service.ts (the in-process fallback path).
 const COLUMNS =
-  'id,company,title,url,description,work_mode,salary_listed,salary_estimate,geo_lat,geo_lng,fit_score,starred,surfaced,first_seen,status,embedding';
+  'id,company,title,url,description,work_mode,salary_listed,salary_estimate,geo_lat,geo_lng,fit_score,fit_rationale,starred,surfaced,first_seen,status,posted_at,expires_at,also_seen,liveness_status,liveness_checked_at,embedding';
 
 parentPort?.on('message', (msg: Msg) => {
   try {
@@ -39,7 +40,7 @@ parentPort?.on('message', (msg: Msg) => {
     db.close();
 
     const out = rankCandidates({ jobs, itemVecs, queryVec: msg.queryVec, weights: msg.weights, ...msg.params });
-    parentPort!.postMessage({ ok: true, results: out.results, embeddedCoverage: { jobs: embeddedJobs, jobsTotal: jobs.length, items: itemVecs.length } });
+    parentPort!.postMessage({ ok: true, results: out.results, total: out.total, embeddedCoverage: { jobs: embeddedJobs, jobsTotal: jobs.length, items: itemVecs.length } });
   } catch (e: any) {
     parentPort!.postMessage({ ok: false, error: e?.message ?? String(e) });
   }

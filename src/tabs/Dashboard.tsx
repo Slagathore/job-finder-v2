@@ -78,12 +78,12 @@ export function Dashboard() {
         <div className="profile-card" style={{ marginBottom: 14 }}>
           <h2>Getting started</h2>
           <ul className="checklist">
-            <li className={gs.llm ? 'done' : ''}>{gs.llm ? '✓' : '○'} Start Ollama (or set an Anthropic key in Settings) — needed for AI features</li>
+            <li className={gs.llm ? 'done' : ''}>{gs.llm ? '✓' : '○'} Start Ollama (or set an Anthropic key in Settings), needed for AI features</li>
             <li className={gs.contact ? 'done' : ''}>{gs.contact ? '✓' : '○'} Settings → add your name + email (used on tailored resumes)</li>
-            <li className={gs.jobs ? 'done' : ''}>{gs.jobs ? '✓' : '○'} Scan ATS boards (button below) — fills the job database</li>
+            <li className={gs.jobs ? 'done' : ''}>{gs.jobs ? '✓' : '○'} Scan ATS boards (button below), fills the job database</li>
             <li className={gs.experience ? 'done' : ''}>{gs.experience ? '✓' : '○'} Experience tab → import a résumé, then “Analyze”</li>
             <li className={gs.embedded ? 'done' : ''}>{gs.embedded ? '✓' : '○'} Search tab → “Embed” then “Discover” your best-fit jobs</li>
-            <li className={gs.extension ? 'done' : ''}>{gs.extension ? '✓' : '○'} (optional) Load the browser extension to harvest Indeed/LinkedIn/Glassdoor — see <b>Settings → Browser extension pairing</b></li>
+            <li className={gs.extension ? 'done' : ''}>{gs.extension ? '✓' : '○'} (optional) Load the browser extension to harvest Indeed/LinkedIn/Glassdoor, see <b>Settings → Browser extension pairing</b></li>
           </ul>
         </div>
       )}
@@ -141,7 +141,7 @@ export function Dashboard() {
               <table className="jobs"><tbody>
                 {today.followups.map(f => (
                   <tr key={`fu${f.appId}`}>
-                    <td><a href={f.url} target="_blank" rel="noreferrer">{f.title}</a> <span className="muted small">— {f.company}</span></td>
+                    <td><a href={f.url} target="_blank" rel="noreferrer">{f.title}</a> <span className="muted small">· {f.company}</span></td>
                     <td className="muted small">{f.state} · {f.daysSince}d</td>
                     <td className="muted small">{f.action}</td>
                   </tr>
@@ -155,7 +155,7 @@ export function Dashboard() {
               <table className="jobs"><tbody>
                 {today.freshFits.map(j => (
                   <tr key={`ff${j.id}`}>
-                    <td><a href={j.url} target="_blank" rel="noreferrer">{j.title}</a> <span className="muted small">— {j.company}</span></td>
+                    <td><a href={j.url} target="_blank" rel="noreferrer">{j.title}</a> <span className="muted small">· {j.company}</span></td>
                     <td className="muted small">{j.fit_score ? `fit ${j.fit_score}` : 'surfaced'}</td>
                     <td className="muted small">{j.work_mode || ''}</td>
                   </tr>
@@ -169,7 +169,7 @@ export function Dashboard() {
               <table className="jobs"><tbody>
                 {today.staleApps.map(a => (
                   <tr key={`sa${a.appId}`}>
-                    <td><a href={a.url} target="_blank" rel="noreferrer">{a.title}</a> <span className="muted small">— {a.company}</span></td>
+                    <td><a href={a.url} target="_blank" rel="noreferrer">{a.title}</a> <span className="muted small">· {a.company}</span></td>
                     <td className="muted small">{a.daysSince}d silent</td>
                     <td />
                   </tr>
@@ -188,7 +188,7 @@ export function Dashboard() {
           <div className="loading-bar short" />
         </>
       ) : jobs.length === 0 ? (
-        <p className="muted">No jobs yet — hit “Scan ATS boards now”.</p>
+        <p className="muted">No jobs yet. Hit “Scan ATS boards now”.</p>
       ) : (
         <table className="jobs">
           <thead><tr><th>Company</th><th>Title</th><th>Location</th><th>Mode</th><th>Source</th></tr></thead>

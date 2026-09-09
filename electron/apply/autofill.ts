@@ -139,30 +139,48 @@ export interface ApplyFillResult {
   submitted?: boolean; assessment?: boolean; error?: string;
 }
 
+// Apply windows are left open whenever the user still has something to do in
+// them (below), so a runaway batch can't pile up unbounded visible windows.
+const MAX_OPEN_APPLY_WINDOWS = 10;
+const openApplyWindows = new Set<BrowserWindow>();
+
 /**
  * Open the posting in a real Electron session window, click through to the form,
  * auto-fill known fields (incl. selects + EEO→decline), upload the tailored
  * résumé, and — only if `autoSubmitWhenComplete` is on and nothing required is
  * left empty — click Submit. Personality/aptitude ASSESSMENTS are detected and
- * left for the user (never auto-answered / engineered). Window stays open.
+ * left for the user (never auto-answered / engineered). The window stays open
+ * whenever the user still has something to do there (an assessment, or a fill
+ * that isn't fully submitted); it's closed once the application is fully
+ * submitted programmatically, on error, or refused outright past the cap.
  */
 export async function applyInWindow(jobId: number): Promise<ApplyFillResult> {
   const db = getDb();
   const job = db.prepare('SELECT id, company, url FROM jobs WHERE id = ?').get(jobId) as any;
   if (!job?.url) return { ok: false, filled: 0, skipped: 0, fileUploaded: false, error: 'No URL for this job.' };
 
+  if (openApplyWindows.size >= MAX_OPEN_APPLY_WINDOWS) {
+    return {
+      ok: false, filled: 0, skipped: 0, fileUploaded: false,
+      error: `Too many application windows open (${MAX_OPEN_APPLY_WINDOWS}) — finish or close one before applying to another.`,
+    };
+  }
+
   const { answers, resumePath } = buildAnswers(jobId);
   const win = new BrowserWindow({
     width: 1120, height: 920, title: `Apply — ${job.company}`,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+  openApplyWindows.add(win);
+  win.once('closed', () => { openApplyWindows.delete(win); });
+  const closeWin = () => { openApplyWindows.delete(win); if (!win.isDestroyed()) win.destroy(); };
 
   try {
     await win.loadURL(job.url, { timeout: 30_000 } as any);
     await wait(1600);
 
     if (await win.webContents.executeJavaScript(ASSESS_CHECK, true).catch(() => false)) {
-      return { ok: true, assessment: true, filled: 0, skipped: 0, fileUploaded: false };
+      return { ok: true, assessment: true, filled: 0, skipped: 0, fileUploaded: false }; // left open for the user
     }
 
     let clicked = false;
@@ -170,7 +188,7 @@ export async function applyInWindow(jobId: number): Promise<ApplyFillResult> {
     if (clicked) await wait(2200);
     // After clicking through, re-check for an assessment step.
     if (await win.webContents.executeJavaScript(ASSESS_CHECK, true).catch(() => false)) {
-      return { ok: true, assessment: true, filled: 0, skipped: 0, fileUploaded: false };
+      return { ok: true, assessment: true, filled: 0, skipped: 0, fileUploaded: false }; // left open for the user
     }
 
     const res: any = await win.webContents.executeJavaScript(fillScript(JSON.stringify(answers)), true);
@@ -183,8 +201,12 @@ export async function applyInWindow(jobId: number): Promise<ApplyFillResult> {
       try { const r: any = await win.webContents.executeJavaScript(submitIfCompleteScript(), true); submitted = !!r.submitted; } catch { /* */ }
     }
 
+    // Fully submitted programmatically — nothing left for the user, close it.
+    // Otherwise leave it open: required fields remain, or auto-submit is off.
+    if (submitted) closeWin();
     return { ok: true, filled: res.filled.length, skipped: res.skipped.length, fileUploaded, submitted, assessment: false };
   } catch (e: any) {
+    closeWin();
     return { ok: false, filled: 0, skipped: 0, fileUploaded: false, error: e?.message ?? String(e) };
   }
 }

@@ -7,16 +7,20 @@ const FIELDS: { key: string; label: string; type?: string; hint?: string }[] = [
   { key: 'candidatePhone', label: 'Your phone' },
   { key: 'candidateLocation', label: 'Your location' },
   { key: 'candidateLinks', label: 'Your links', hint: 'e.g. github.com/you, linkedin.com/in/you' },
-  { key: 'ollamaBaseUrl', label: 'Ollama base URL', hint: 'Native API — chat, health, embeddings, local models' },
+  { key: 'ollamaBaseUrl', label: 'Ollama base URL', hint: 'Native API: chat, health, embeddings, local models' },
   { key: 'primaryModel', label: 'Primary model', hint: 'Default: kimi-k2.7-code:cloud' },
   { key: 'fallbackLocalModel', label: 'Local fallback model', hint: 'Used if cloud + Anthropic both fail' },
-  { key: 'anthropicApiKey', label: 'Anthropic API key', type: 'password', hint: 'Optional — enables Anthropic fallback' },
+  { key: 'anthropicApiKey', label: 'Anthropic API key', type: 'password', hint: 'Optional, enables Anthropic fallback' },
   { key: 'anthropicModel', label: 'Anthropic model' },
   { key: 'embeddingModel', label: 'Embedding model', hint: 'Local, via Ollama (phase 4 semantic search)' },
   { key: 'scanIntervalMinutes', label: 'Scan interval (min)', type: 'number', hint: '0 = off (also paces mail ingest)' },
   { key: 'gmailClientId', label: 'Gmail OAuth client ID', hint: 'From your Google Cloud OAuth (Desktop) client' },
   { key: 'gmailClientSecret', label: 'Gmail OAuth client secret', type: 'password' },
   { key: 'pruneAfterDays', label: 'Auto-prune after (days)', type: 'number', hint: 'Remove UNTOUCHED discovered jobs older than this; 0 = off. Starred/graded/applied are never pruned.' },
+  { key: 'autoGradeTopN', label: 'Auto-grade top N results', type: 'number', hint: 'Fit-grade this many top hits after every search. 0 turns it off. Grades are cached, so raising it only costs the new ones.' },
+  { key: 'payMin', label: 'Pay floor ($/yr)', type: 'number', hint: 'The grader treats anything under this as a fail. 0 = no floor.' },
+  { key: 'payTarget', label: 'Pay target ($/yr)', type: 'number', hint: 'What you are aiming at. The grader rewards postings at or above it. 0 = not set.' },
+  { key: 'preferredWorkMode', label: 'Preferred work mode', hint: 'remote, hybrid or onsite. Leave blank for no preference. Used by the fit grader.' },
 ];
 
 export function SettingsTab() {
@@ -71,7 +75,7 @@ export function SettingsTab() {
     if (!ok) return;
     const token = await window.api.app.rotateHubToken();
     setHub(h => h ? { ...h, token } : h);
-    toast('Token rotated — update the extension popup.', 'success');
+    toast('Token rotated. Update the extension popup.', 'success');
   }
 
   async function addBlock() {
@@ -113,7 +117,7 @@ export function SettingsTab() {
             <input readOnly value={hub.token} onFocus={e => e.currentTarget.select()} /></div>
           <div className="row">
             <button className="link" onClick={rotateToken}>rotate token</button>
-            <span className="muted small">Invalidates the old pairing immediately — paste the new token into the extension popup.</span>
+            <span className="muted small">Invalidates the old pairing immediately. Paste the new token into the extension popup.</span>
           </div>
         </div>
       )}
@@ -178,7 +182,7 @@ export function SettingsTab() {
             onChange={async e => { const v = e.target.checked; setS(p => ({ ...p, autoSubmitWhenComplete: v })); await window.api.settings.set({ autoSubmitWhenComplete: v }); }} />
           Auto-submit when the form is 100% complete (clicks Submit only if no required field is empty)
         </label>
-        <p className="muted small">Off by default. Personality/aptitude assessments are detected and left for you — never auto-answered.</p>
+        <p className="muted small">Off by default. Personality/aptitude assessments are detected and left for you, never auto-answered.</p>
       </div>
 
       {gmail && (
@@ -201,7 +205,7 @@ export function SettingsTab() {
         <div className="profile-card" style={{ marginTop: 18 }}>
           <h2>Maintenance</h2>
           <p className="muted small">{stats.jobs} jobs · {stats.applications} applications · {stats.starred} starred · {stats.prunable} prunable now.</p>
-          <p className="muted small">Prune only removes <b>untouched</b> discovered jobs older than the cutoff above. Anything starred, graded, salary-checked, surfaced, or applied to is never auto-removed — remove those manually.</p>
+          <p className="muted small">Prune only removes <b>untouched</b> discovered jobs older than the cutoff above. Anything starred, graded, salary-checked, surfaced, or applied to is never auto-removed. Remove those manually.</p>
           <div className="row">
             <button className="primary" onClick={pruneNow}>Prune now</button>
             {pruneMsg && <span className="muted small">{pruneMsg}</span>}
@@ -211,14 +215,14 @@ export function SettingsTab() {
 
       <div className="profile-card" style={{ marginTop: 18 }}>
         <h2>Diagnostics</h2>
-        <p className="muted small">One-click health check of every subsystem — run this when something seems off.</p>
+        <p className="muted small">One-click health check of every subsystem. Run this when something seems off.</p>
         <button className="primary" onClick={async () => { setDoctor([]); setDoctorBusy(true); try { setDoctor(await window.api.career.doctor()); } finally { setDoctorBusy(false); } }} disabled={doctorBusy}>
           {doctorBusy ? 'Checking…' : 'Run diagnostics'}
         </button>
         {doctor.length > 0 && (
           <ul className="rules" style={{ marginTop: 8 }}>
             {doctor.map((c, i) => (
-              <li key={i}>{c.ok ? '✅' : '❌'} <b>{c.name}</b> <span className="muted small">— {c.detail}</span></li>
+              <li key={i}>{c.ok ? '✅' : '❌'} <b>{c.name}</b> <span className="muted small">: {c.detail}</span></li>
             ))}
           </ul>
         )}
@@ -243,7 +247,7 @@ export function SettingsTab() {
 
       <div className="profile-card" style={{ marginTop: 18 }}>
         <h2>Company blocklist</h2>
-        <p className="muted small">The hard apply gate — these companies are never applied to (matching is normalized).</p>
+        <p className="muted small">The hard apply gate: these companies are never applied to (matching is normalized).</p>
         <div className="addform">
           <input placeholder="company name" value={blockName} onChange={e => setBlockName(e.target.value)} />
           <button className="primary" onClick={addBlock}>Block</button>

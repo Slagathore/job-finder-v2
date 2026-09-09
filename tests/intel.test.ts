@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSalary, parseCompanyIntel, parseMoves, parseCerts } from '../electron/intel/parse';
+import { parseSalary, parseCompanyIntel, parseMoves, parseCerts, normalizeCert, ensurePromotionTrack } from '../electron/intel/parse';
 
 describe('parseSalary', () => {
   it('parses numbers + clamps confidence', () => {
@@ -32,11 +32,56 @@ describe('parseMoves', () => {
   });
 });
 
+describe('parseMoves industries and titles', () => {
+  it('keeps the industries and job titles a move makes you a candidate for', () => {
+    const m = parseMoves('[{"role_family":"Solutions Engineer","industries":["SaaS","fintech",7],"titles":["Sales Engineer"]}]');
+    expect(m[0].industries).toEqual(['SaaS', 'fintech']);
+    expect(m[0].titles).toEqual(['Sales Engineer']);
+  });
+  it('throws instead of returning an empty list', () => {
+    expect(() => parseMoves('I cannot answer that')).toThrow(/no usable moves/i);
+    expect(() => parseMoves('[]')).toThrow(/no usable moves/i);
+  });
+});
+
 describe('parseCerts', () => {
   it('parses + defaults lift/effort', () => {
     const c = parseCerts('[{"certificate":"AWS SA","lift":"high","effort":"medium","rationale":"r","confidence":"high"},{"certificate":"X"}]');
     expect(c).toHaveLength(2);
     expect(c[0]).toMatchObject({ certificate: 'AWS SA', lift: 'high' });
     expect(c[1]).toMatchObject({ certificate: 'X', lift: 'medium', effort: 'medium' });
+  });
+  it('keeps the industries and titles the credential opens up', () => {
+    const c = parseCerts('[{"certificate":"CCNA","industries":["networking"],"titles":["Network Technician"],"track":"promotion"}]');
+    expect(c[0].industries).toEqual(['networking']);
+    expect(c[0].titles).toEqual(['Network Technician']);
+    expect(c[0].track).toBe('promotion');
+  });
+  it('always labels one promotion track option', () => {
+    const c = parseCerts('[{"certificate":"A","lift":"low","effort":"high"},{"certificate":"B","lift":"high","effort":"low"}]');
+    expect(c.filter(x => x.track === 'promotion')).toHaveLength(1);
+    expect(c.find(x => x.track === 'promotion')?.certificate).toBe('B');
+  });
+  it('leaves the model own promotion pick alone', () => {
+    const c = parseCerts('[{"certificate":"A","lift":"low","effort":"high","track":"promotion"},{"certificate":"B","lift":"high","effort":"low"}]');
+    expect(c.find(x => x.track === 'promotion')?.certificate).toBe('A');
+  });
+  it('throws instead of returning an empty list', () => {
+    expect(() => parseCerts('nothing here')).toThrow(/no usable credential advice/i);
+  });
+});
+
+describe('normalizeCert', () => {
+  it('fills the new fields in for rows cached before they existed', () => {
+    const c = normalizeCert({ certificate: 'Old Row', lift: 'high' });
+    expect(c).toMatchObject({ certificate: 'Old Row', lift: 'high', effort: 'medium', track: 'lateral' });
+    expect(c.industries).toEqual([]);
+    expect(c.titles).toEqual([]);
+  });
+});
+
+describe('ensurePromotionTrack', () => {
+  it('is a no-op on an empty set', () => {
+    expect(ensurePromotionTrack([])).toEqual([]);
   });
 });

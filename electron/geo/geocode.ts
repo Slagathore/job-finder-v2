@@ -62,25 +62,37 @@ export async function geocodeText(query: string): Promise<GeoResult | null> {
   }
 }
 
+// Both the manual "Geocode job locations" button (ipc/geo.ts) and the automatic
+// post-harvest pass (main.ts scheduleAutoGeocode) call into this module. Nominatim's
+// throttle below assumes a single caller at a time; without this guard two concurrent
+// runs could both compute an overlapping wait and briefly exceed the rate limit.
+let geocodingInFlight = false;
+
 /**
  * Geocode distinct non-remote job location strings (cached + throttled) and
  * stamp jobs.geo_lat/lng. Capped per run to stay within Nominatim's rate limit.
  */
 export async function geocodeJobs(limit = 60): Promise<{ resolved: number; failed: number; remaining: number }> {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT DISTINCT location_raw FROM jobs
-    WHERE geo_lat IS NULL AND (work_mode IS NULL OR work_mode != 'remote')
-      AND location_raw IS NOT NULL AND TRIM(location_raw) != ''
-  `).all() as { location_raw: string }[];
+  if (geocodingInFlight) return { resolved: 0, failed: 0, remaining: 0 };
+  geocodingInFlight = true;
+  try {
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT DISTINCT location_raw FROM jobs
+      WHERE geo_lat IS NULL AND (work_mode IS NULL OR work_mode != 'remote')
+        AND location_raw IS NOT NULL AND TRIM(location_raw) != ''
+    `).all() as { location_raw: string }[];
 
-  const batch = rows.slice(0, limit);
-  const upd = db.prepare('UPDATE jobs SET geo_lat = ?, geo_lng = ? WHERE location_raw = ?');
-  let resolved = 0, failed = 0;
-  for (const { location_raw } of batch) {
-    const r = await geocodeText(location_raw);
-    if (r) { upd.run(r.lat, r.lng, location_raw); resolved++; }
-    else failed++;
+    const batch = rows.slice(0, limit);
+    const upd = db.prepare('UPDATE jobs SET geo_lat = ?, geo_lng = ? WHERE location_raw = ?');
+    let resolved = 0, failed = 0;
+    for (const { location_raw } of batch) {
+      const r = await geocodeText(location_raw);
+      if (r) { upd.run(r.lat, r.lng, location_raw); resolved++; }
+      else failed++;
+    }
+    return { resolved, failed, remaining: Math.max(0, rows.length - batch.length) };
+  } finally {
+    geocodingInFlight = false;
   }
-  return { resolved, failed, remaining: Math.max(0, rows.length - batch.length) };
 }

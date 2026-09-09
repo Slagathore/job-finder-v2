@@ -3,11 +3,21 @@ import { toast, promptDialog } from '../lib/feedback';
 
 const MODES = ['remote', 'hybrid', 'onsite'];
 
+/** Grades already cached in the DB, so a re-search shows them without re-spending an LLM call. */
+function seedGrades(results: any[]): Record<number, { grade: string; rationale: string }> {
+  const out: Record<number, { grade: string; rationale: string }> = {};
+  for (const r of results) {
+    if (r.fit_grade) out[r.id] = { grade: r.fit_grade, rationale: r.fit_rationale ?? '' };
+  }
+  return out;
+}
+
 export function SearchTab() {
   const [roleFits, setRoleFits] = useState<any[]>([]);
   const [roleFamily, setRoleFamily] = useState('');
   const [tags, setTags] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [excludeKeyword, setExcludeKeyword] = useState('');
   const [modes, setModes] = useState<string[]>([]);
   const [payMin, setPayMin] = useState('');
   const [sort, setSort] = useState<'fit' | 'pay' | 'date' | 'distance'>('fit');
@@ -17,16 +27,30 @@ export function SearchTab() {
   const [radius, setRadius] = useState('50');
 
   const [rows, setRows] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(100);
+  const [lastParams, setLastParams] = useState<any>(null);
   const [coverage, setCoverage] = useState<any>(null);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
   const [grades, setGrades] = useState<Record<number, { grade: string; rationale: string }>>({});
+  const [gradeProg, setGradeProg] = useState<{ done: number; total: number; running: boolean; note?: string } | null>(null);
   const [docs, setDocs] = useState<Record<number, any>>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [prepared, setPrepared] = useState<any[] | null>(null);
   const [sal, setSal] = useState<Record<number, any>>({});
   const [saved, setSaved] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+
+  // The top hits are graded in the background after each search, so results
+  // render immediately and the letters fill in as they land.
+  useEffect(() => window.api.discovery.onGradeProgress(p => {
+    if (p.jobId && p.grade) {
+      const id = p.jobId;
+      setGrades(g => ({ ...g, [id]: { grade: p.grade!, rationale: p.rationale ?? '' } }));
+    }
+    setGradeProg(p.running || p.note ? { done: p.done, total: p.total, running: p.running, note: p.note } : null);
+  }), []);
 
   useEffect(() => {
     window.api.experience.getProfile().then(p => setRoleFits(p.roleFits ?? []));
@@ -73,20 +97,22 @@ export function SearchTab() {
 
   function savedObj() {
     return {
-      tags, roleFamily, keyword, workModes: modes, sort, locText,
+      tags, roleFamily, keyword, excludeKeyword, workModes: modes, sort, locText,
       payMin: Number(payMin) || 0, radiusMi: Number(radius) || 0,
       location: loc ? { lat: loc.lat, lng: loc.lng } : null,
     };
   }
-  async function execSearch(p: any) {
+  async function execSearch(p: any, showLimit = 100) {
     setBusy('Searching…'); setMsg('');
-    const r = await window.api.discovery.search({ ...p, limit: 100 });
+    const r = await window.api.discovery.search({ ...p, limit: showLimit });
     setBusy('');
     if ('error' in r) { setMsg(`⚠️ ${r.error}`); return; }
     setRows(r.results); setCoverage(r.embeddedCoverage);
+    setGrades(seedGrades(r.results));
+    setTotal(r.total ?? r.results.length); setLimit(showLimit); setLastParams(p);
     window.api.searches.log(p).then(() => window.api.searches.history().then(setHistory));
-    if (r.embeddedCoverage.items === 0) setMsg('No experience embeddings — import experience + click “Embed”. Showing keyword/filter results.');
-    else if (r.embeddedCoverage.jobs === 0) setMsg('No job embeddings yet — click “Embed”. Showing keyword/filter results.');
+    if (r.embeddedCoverage.items === 0) setMsg('No experience embeddings. Import experience + click “Embed”. Showing keyword/filter results.');
+    else if (r.embeddedCoverage.jobs === 0) setMsg('No job embeddings yet. Click “Embed”. Showing keyword/filter results.');
   }
   async function runSearch() { await execSearch(savedObj()); }
   async function saveSearch() {
@@ -98,6 +124,7 @@ export function SearchTab() {
   }
   function loadParams(p: any) {
     setTags(p.tags || ''); setRoleFamily(p.roleFamily || ''); setKeyword(p.keyword || '');
+    setExcludeKeyword(p.excludeKeyword || '');
     setModes(p.workModes || []); setPayMin(p.payMin ? String(p.payMin) : ''); setSort(p.sort || 'fit');
     setLocText(p.locText || ''); setRadius(p.radiusMi ? String(p.radiusMi) : '50');
     setLoc(p.location ? { lat: p.location.lat, lng: p.location.lng, label: p.locText || 'saved' } : null);
@@ -125,7 +152,7 @@ export function SearchTab() {
     const u = indeedUrl();
     if (!u) { toast('Add tags, a keyword, or pick a role family first.', 'error'); return; }
     await window.api.app.openExternal(u);
-    toast('Indeed opened — with the extension paired + auto-harvest on, jobs stream in here automatically.');
+    toast('Indeed opened. With the extension paired and auto-harvest on, jobs stream in here automatically.');
   }
 
   async function discover() {
@@ -134,9 +161,16 @@ export function SearchTab() {
     setBusy('');
     if ('error' in r) { setMsg(`⚠️ ${r.error}`); return; }
     if (r.note) setMsg(r.note);
-    setRows(r.results); setCoverage(null);
+    setRows(r.results); setCoverage(null); setGrades(seedGrades(r.results));
+    setTotal(r.results.length); setLastParams(null);
   }
 
+  async function gradeShown(force = false) {
+    const ids = rows.map(r => r.id);
+    if (!ids.length) return;
+    const r = await window.api.discovery.gradeTop(ids, force);
+    if ('error' in r) toast(r.error, 'error');
+  }
   async function grade(id: number) {
     setGrades(g => ({ ...g, [id]: { grade: '…', rationale: '' } }));
     const r = await window.api.discovery.grade(id);
@@ -163,7 +197,7 @@ export function SearchTab() {
     setBusy(''); setPrepared(r.items);
   }
   function fillSummary(r: any): string {
-    if (r.assessment) return 'assessment detected — complete it in the window';
+    if (r.assessment) return 'assessment detected, complete it in the window';
     let m = `auto-filled ${r.filled ?? 0} fields, ${r.skipped ?? 0} left for you${r.fileUploaded ? ' · résumé uploaded' : ''}`;
     if (r.submitted) m += ' · submitted ✓';
     return m;
@@ -189,7 +223,7 @@ export function SearchTab() {
   }
   async function block(company: string) {
     await window.api.blocklist.add(company);
-    toast(`Blocked ${company} — future scans will skip it.`, 'success');
+    toast(`Blocked ${company}. Future scans will skip it.`, 'success');
   }
   async function watchCompany(company: string) {
     await window.api.watch.add(company);
@@ -202,12 +236,22 @@ export function SearchTab() {
   }
   const fmtK = (n: number | null) => (n ? `$${Math.round(n / 1000)}k` : '?');
 
+  function parseAlsoSeen(j: any): { source: string; url: string }[] {
+    try { const p = JSON.parse(j.also_seen || '[]'); return Array.isArray(p) ? p : []; } catch { return []; }
+  }
+  const alsoSeenCount = (j: any) => parseAlsoSeen(j).length;
+  const alsoSeenList = (j: any) => parseAlsoSeen(j).map(x => `${x.source}: ${x.url}`).join('\n');
+  function daysAgo(ts: number): string {
+    const d = Math.floor((Date.now() - ts) / 86_400_000);
+    return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d}d ago`;
+  }
+
   return (
     <div className="panel" style={{ maxWidth: 1000 }}>
       <h1>Search &amp; Discover</h1>
 
       <div className="row">
-        <button className="primary" onClick={openIndeed} title="Opens indeed.com with these filters — the paired extension harvests results automatically">Search Indeed ↗</button>
+        <button className="primary" onClick={openIndeed} title="Opens indeed.com with these filters. The paired extension harvests results automatically">Search Indeed ↗</button>
         <button className="primary" onClick={discover} disabled={!!busy}>Discover best fits ✨</button>
         <button className="primary" onClick={embed} disabled={!!busy}>Embed jobs + experience</button>
         <button className="primary" onClick={geocodeJobs} disabled={!!busy}>Geocode job locations</button>
@@ -250,6 +294,8 @@ export function SearchTab() {
       <div className="searchgrid">
         <input placeholder="tags (comma-separated, semantic)" value={tags} onChange={e => setTags(e.target.value)} />
         <input placeholder="keyword (exact match)" value={keyword} onChange={e => setKeyword(e.target.value)} />
+        <input placeholder="exclude (comma-separated)" title="Hide any job whose title, company or description contains one of these terms"
+               value={excludeKeyword} onChange={e => setExcludeKeyword(e.target.value)} />
         <input placeholder="min pay ($/yr)" value={payMin} onChange={e => setPayMin(e.target.value)} />
         <select value={sort} onChange={e => setSort(e.target.value as any)}>
           <option value="fit">sort: fit</option>
@@ -276,6 +322,26 @@ export function SearchTab() {
         <button className="primary" onClick={runSearch} disabled={!!busy}>Search</button>
       </div>
 
+      {rows.length > 0 && (
+        <p className="muted small">
+          Showing {rows.length} of {total} matching job{total === 1 ? '' : 's'}
+          {total > rows.length && (
+            <> · <button className="link" disabled={!!busy}
+                   onClick={() => execSearch(lastParams ?? savedObj(), limit + 100)}>show 100 more</button></>
+          )}
+        </p>
+      )}
+      {rows.length > 0 && (
+        <p className="muted small">
+          {gradeProg?.running
+            ? `Grading fit ${gradeProg.done} of ${gradeProg.total}…`
+            : gradeProg?.note
+              ? gradeProg.note
+              : 'Fit grades come from the LLM rubric. Ungraded rows say so rather than showing a guess.'}
+          {' · '}
+          <button className="link" disabled={!!gradeProg?.running} onClick={() => gradeShown(false)}>grade the rest</button>
+        </p>
+      )}
       {coverage && <p className="muted small">Embedded: {coverage.jobs}/{coverage.jobsTotal} jobs · {coverage.items} line items{loc ? ` · near ${loc.label}` : ''}</p>}
       {msg && <p className="muted small">{msg}</p>}
 
@@ -294,13 +360,26 @@ export function SearchTab() {
             <tr key={j.id} className={j.surfaced ? 'surfaced' : ''}>
               <td><input type="checkbox" checked={selected.has(j.id)} onChange={() => toggleSelect(j.id)} /></td>
               <td><button className="star" aria-label={j.starred ? 'Unstar job' : 'Star job'} onClick={() => star(j)}>{j.starred ? '★' : '☆'}</button></td>
-              <td title={`sim ${(j.sim ?? 0).toFixed(3)}`}>
-                <b>{grades[j.id]?.grade ?? j.fit_grade ?? '—'}</b>
-                {typeof j.sim === 'number' && j.sim > 0 && <span className="muted small"> {Math.round(j.sim * 100)}%</span>}
+              <td title={grades[j.id]
+                ? `Fit grade ${grades[j.id].grade}, from the LLM rubric against your profile, pay floor, work mode and location.`
+                : 'Not graded yet. Retrieval similarity orders this list, it is not a match score.'
+                  + ` (retrieval similarity ${(j.sim ?? 0).toFixed(3)}, lexical ${(j.lex ?? 0).toFixed(2)})`}>
+                {grades[j.id]
+                  ? <b>{grades[j.id].grade}</b>
+                  : <span className="muted small">{gradeProg?.running ? 'grading…' : 'not graded'}</span>}
               </td>
               <td>
                 <a href={j.url} target="_blank" rel="noreferrer">{j.title}</a>
                 {j.surfaced ? <span className="badge">surfaced</span> : null}
+                {j.liveness_status === 'dead'
+                  ? <span className="badge badge-warn" title="A background re-check of the posting itself came back closed or no longer available.">posting closed</span>
+                  : j.expires_at && j.expires_at < Date.now()
+                    ? <span className="badge badge-warn" title="Past its estimated shelf life. This is a guess from the posting date, not a confirmed closure.">likely expired</span>
+                    : null}
+                {alsoSeenCount(j) > 0 && (
+                  <span className="muted small" title={alsoSeenList(j)}> · also on {alsoSeenCount(j)} other board{alsoSeenCount(j) === 1 ? '' : 's'}</span>
+                )}
+                {j.posted_at ? <span className="muted small"> · posted {daysAgo(j.posted_at)}</span> : null}
                 {grades[j.id]?.rationale && <div className="muted small">{grades[j.id].rationale}</div>}
                 {docs[j.id]?.summary && <div className="muted small">📄 {docs[j.id].summary}</div>}
                 {docs[j.id]?.error && <div className="muted small">⚠️ {docs[j.id].error}</div>}
@@ -319,8 +398,8 @@ export function SearchTab() {
               </td>
               <td className="rowacts">
                 <button className="link" onClick={() => grade(j.id)}>grade</button>
-                <button className="link" onClick={() => estSalary(j.id)}>{sal[j.id]?.busy ? '…' : '$est'}</button>
-                <button className="link" onClick={() => tailor(j.id)}>{docs[j.id]?.busy ? '…' : 'tailor'}</button>
+                <button className="link" onClick={() => estSalary(j.id)}>{sal[j.id]?.busy ? <span className="spinner" aria-label="Estimating…" /> : '$est'}</button>
+                <button className="link" onClick={() => tailor(j.id)}>{docs[j.id]?.busy ? <span className="spinner" aria-label="Tailoring…" /> : 'tailor'}</button>
                 {docs[j.id]?.cv && <button className="link" onClick={() => openPath(docs[j.id].cv)}>CV</button>}
                 {docs[j.id]?.cover && <button className="link" onClick={() => openPath(docs[j.id].cover)}>cover</button>}
                 <button className="link" onClick={() => block(j.company)}>block</button>
@@ -344,7 +423,7 @@ export function SearchTab() {
             <tbody>
               {prepared.map(it => (
                 <tr key={it.jobId}>
-                  <td>{it.title} <span className="muted small">— {it.company}</span>
+                  <td>{it.title} <span className="muted small">· {it.company}</span>
                     {it.blocked && <div className="muted small">⛔ blocklisted</div>}
                     {it.error && <div className="muted small">⚠️ {it.error}</div>}
                     {it.submitErr && <div className="muted small">⚠️ {it.submitErr}</div>}

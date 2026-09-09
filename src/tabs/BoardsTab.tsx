@@ -14,7 +14,7 @@ export function BoardsTab() {
   async function probe(b: any) {
     setRowStatus(s => ({ ...s, [b.id]: 'probing…' }));
     const r = await window.api.boards.probe(b.url, b.id);
-    setRowStatus(s => ({ ...s, [b.id]: 'error' in r ? `⚠️ ${r.error}` : `${r.ingress}/${r.method} · ${r.count} jobs${r.note ? ` — ${r.note}` : ''}` }));
+    setRowStatus(s => ({ ...s, [b.id]: 'error' in r ? `⚠️ ${r.error}` : `${r.ingress}/${r.method} · ${r.count} jobs${r.note ? `: ${r.note}` : ''}` }));
     refresh();
   }
   async function learn(b: any) {
@@ -27,7 +27,7 @@ export function BoardsTab() {
   async function add() {
     if (!name.trim() || !url.trim()) return;
     const r = await window.api.boards.add({ name: name.trim(), url: url.trim() });
-    toast(r.detected ? `Added — detected ${r.detected} API ✓` : 'Added — no ATS API detected (DOM adapter needed, phase 7)', r.detected ? 'success' : 'info');
+    toast(r.detected ? `Added, detected ${r.detected} API ✓` : 'Added, no ATS API detected (DOM adapter needed, phase 7)', r.detected ? 'success' : 'info');
     setName(''); setUrl('');
     refresh();
   }
@@ -64,24 +64,31 @@ export function BoardsTab() {
           <div className="loading-bar short" />
         </>
       ) : boards.length === 0 ? (
-        <p className="muted">No boards tracked yet — add one above.</p>
+        <p className="muted">No boards tracked yet. Add one above.</p>
       ) : (
         <table className="jobs">
           <thead><tr><th>On</th><th>Name</th><th>Ingress</th><th>URL</th><th>Actions</th></tr></thead>
           <tbody>
-            {boards.map(b => (
-              <tr key={b.id}>
-                <td><input type="checkbox" aria-label={`Enable scanning for ${b.name}`} checked={!!b.enabled} onChange={e => toggle(b.id, e.target.checked)} /></td>
-                <td>{b.name}{rowStatus[b.id] && <div className={rowStatus[b.id].startsWith('⚠️') ? 'msg-error' : 'muted small'}>{rowStatus[b.id]}</div>}</td>
-                <td className="muted small">{b.ingress}{b.status ? ` (${b.status})` : ''}{b.adapter_stale ? <span className="sev-high"> ⚠ stale — re-learn</span> : ''}</td>
-                <td className="muted small">{b.url}</td>
-                <td className="rowacts">
-                  <button className="link" aria-label={`Probe ${b.name}`} onClick={() => probe(b)}>probe</button>
-                  <button className="link" aria-label={`Learn selectors for ${b.name}`} onClick={() => learn(b)}>learn</button>
-                  <button className="link" aria-label={`Remove ${b.name}`} onClick={() => remove(b.id, b.name)}>remove</button>
-                </td>
-              </tr>
-            ))}
+            {boards.map(b => {
+              const harvestedByExtension = b.ingress === 'extension';
+              return (
+                <tr key={b.id}>
+                  <td><input type="checkbox" aria-label={`Enable scanning for ${b.name}`} checked={!!b.enabled} onChange={e => toggle(b.id, e.target.checked)} /></td>
+                  <td>{b.name}{rowStatus[b.id] && <div className={rowStatus[b.id].startsWith('⚠️') ? 'msg-error' : 'muted small'}>{rowStatus[b.id]}</div>}</td>
+                  <td className="muted small">
+                    {harvestedByExtension
+                      ? <>harvested by the extension<div className="muted small">Renders with JavaScript and blocks scraping, so it is not scanned here. Use the browser extension for this site instead.</div></>
+                      : <>{b.ingress}{b.status ? ` (${b.status})` : ''}{b.adapter_stale ? <span className="sev-high"> ⚠ stale, re-learn</span> : ''}</>}
+                  </td>
+                  <td className="muted small">{b.url}</td>
+                  <td className="rowacts">
+                    {!harvestedByExtension && <button className="link" aria-label={`Probe ${b.name}`} onClick={() => probe(b)}>probe</button>}
+                    {!harvestedByExtension && <button className="link" aria-label={`Learn selectors for ${b.name}`} onClick={() => learn(b)}>learn</button>}
+                    <button className="link" aria-label={`Remove ${b.name}`} onClick={() => remove(b.id, b.name)}>remove</button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

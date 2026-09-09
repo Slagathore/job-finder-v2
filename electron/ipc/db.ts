@@ -323,6 +323,50 @@ export function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_contacts_company ON contacts(company);
 
+    -- ── Project ingestion (GitHub / folder / web app) ──────────────────
+    -- One row per repo the connected GitHub account can see. Digest state is
+    -- persisted so closing the app mid-scan shows the truth on reopen and a
+    -- rerun resumes instead of re-digesting everything.
+    CREATE TABLE IF NOT EXISTS project_repos (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name      TEXT NOT NULL UNIQUE,      -- owner/repo
+      private        INTEGER NOT NULL DEFAULT 0,
+      description    TEXT,
+      language       TEXT,
+      pushed_at      TEXT,                      -- ISO from the API
+      html_url       TEXT,
+      default_branch TEXT,
+      state          TEXT NOT NULL DEFAULT 'pending',  -- pending|running|done|error
+      depth          TEXT,                      -- medium|deep, the deepest pass done
+      items          INTEGER NOT NULL DEFAULT 0,
+      digested_at    INTEGER,
+      last_error     TEXT,
+      updated_at     INTEGER NOT NULL
+    );
+
+    -- ── Agent console conversations (persistent chat history) ──────────
+    -- The agent console keeps its threads on disk so a reload or an app
+    -- restart does not throw the conversation away.
+    CREATE TABLE IF NOT EXISTS agent_conversations (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      title      TEXT NOT NULL,
+      mode       TEXT NOT NULL DEFAULT 'agent',   -- agent|interview
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_conv_updated ON agent_conversations(updated_at);
+
+    CREATE TABLE IF NOT EXISTS agent_messages (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id INTEGER NOT NULL,
+      role            TEXT NOT NULL,              -- user|assistant
+      content         TEXT NOT NULL,
+      plan            TEXT,                       -- json Plan (summary + steps)
+      results         TEXT,                       -- json StepResult[]
+      created_at      INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_msgs_conv ON agent_messages(conversation_id);
+
     -- ── STAR story bank (ported from career-ops interview-prep) ────────
     CREATE TABLE IF NOT EXISTS story_bank (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -333,10 +377,43 @@ export function initDb() {
       created_at INTEGER NOT NULL,
       last_used  INTEGER
     );
+
+    -- ── Portfolio review (what the ingested projects prove) ────────────
+    -- One row per run. The signature is a fingerprint of the project line
+    -- items, so a cached review is reused only while the portfolio matches.
+    CREATE TABLE IF NOT EXISTS portfolio_review (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      review        TEXT NOT NULL,     -- json PortfolioReview
+      signature     TEXT,
+      item_count    INTEGER NOT NULL DEFAULT 0,
+      project_count INTEGER NOT NULL DEFAULT 0,
+      created_at    INTEGER NOT NULL
+    );
+
+    -- ── Career direction (preference intake + direction report) ────────
+    -- The intake is a single revisable row so it is never asked twice.
+    CREATE TABLE IF NOT EXISTS career_intake (
+      id         INTEGER PRIMARY KEY CHECK (id = 1),
+      answers    TEXT NOT NULL,        -- json IntakeAnswers
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS career_direction (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      report     TEXT NOT NULL,        -- json DirectionReport
+      intake     TEXT,                 -- json snapshot of the answers it used
+      item_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
   `);
 
   migrate('saved_searches', 'params', 'TEXT');
   migrate('boards', 'adapter_stale', 'INTEGER');
+  migrate('jobs', 'posted_at', 'INTEGER');    // when the board says it was posted
+  migrate('jobs', 'expires_at', 'INTEGER');   // soft expiry, derived from posted_at/first_seen
+  migrate('jobs', 'also_seen', 'TEXT');       // json [{source,url}] of collapsed duplicates
+  migrate('jobs', 'liveness_checked_at', 'INTEGER'); // last background liveness re-check, epoch ms
+  migrate('jobs', 'liveness_status', 'TEXT');        // live|dead|unreachable, null = never checked
   seedCapabilityDefaults();
 }
 

@@ -127,9 +127,9 @@ export async function evalTraining(course: string): Promise<{ eval: TrainingEval
 export function buildDeepResearchPrompt(company: string, role: string, profile: any): string {
   const skills = (profile?.skills ?? []).slice(0, 12).join(', ');
   const narrative = profile?.narrative ? `\nMy background: ${profile.narrative}` : '';
-  return `## Deep Research: ${company} — ${role}
+  return `## Deep Research: ${company}, ${role}
 
-Context: I'm interviewing for ${role} at ${company}. I need actionable, current information — cite sources and dates where possible.
+Context: I'm interviewing for ${role} at ${company}. I need actionable, current information, cite sources and dates where possible.
 
 ### 1. Product & technology strategy
 - What are their core products, and which are growing or being sunset?
@@ -153,10 +153,10 @@ Context: I'm interviewing for ${role} at ${company}. I need actionable, current 
 
 ### 5. Competitors & differentiation
 - Who are their main competitors and how do they position against them?
-- What is their moat — and what threatens it?
+- What is their moat, and what threatens it?
 
 ### 6. My angle
-Given my profile — ${skills || 'see below'}${narrative}
+Given my profile: ${skills || 'see below'}${narrative}
 - Where does someone with my background add the most value to this team?
 - Which of my experiences are most relevant to their current challenges?
 - What story should I lead with in the interview?`;

@@ -45,7 +45,7 @@ export default function App() {
 
   useEffect(() => { setVisited(v => v.includes(tab) ? v : [...v, tab]); }, [tab]);
 
-  function renderTab(id: TabId): React.ReactNode {
+  function renderTab(id: TabId, active: boolean): React.ReactNode {
     switch (id) {
       case 'dashboard': return <Dashboard />;
       case 'settings': return <SettingsTab />;
@@ -53,7 +53,7 @@ export default function App() {
       case 'pipeline': return <PipelineTab />;
       case 'experience': return <ExperienceTab />;
       case 'boards': return <BoardsTab />;
-      case 'career': return <CareerTab />;
+      case 'career': return <CareerTab active={active} />;
       case 'agent': return <AgentTab onOpenTab={(t) => setTab(t as TabId)} />;
       case 'selfext': return <SelfExtendTab />;
     }
@@ -171,7 +171,7 @@ export default function App() {
             <span className="update-text">
               {update.emergency
                 ? <><strong>⚠ Critical update:</strong> {update.emergencyMessage}</>
-                : <><strong>Update available</strong> — v{update.latestVersion} · {update.summary}</>}
+                : <><strong>Update available</strong>: v{update.latestVersion} · {update.summary}</>}
             </span>
             <span className="update-actions">
               {update.canInstall ? (
@@ -212,7 +212,7 @@ export default function App() {
             is isolated and retryable without nuking the others' state. */}
         {tabs.map(t => visited.includes(t.id) && (
           <div key={t.id} style={t.id === tab ? undefined : { display: 'none' }}>
-            <ErrorBoundary>{renderTab(t.id)}</ErrorBoundary>
+            <ErrorBoundary>{renderTab(t.id, t.id === tab)}</ErrorBoundary>
           </div>
         ))}
       </main>

@@ -38,7 +38,7 @@ export async function probeIngress(url: string): Promise<ProbeResult> {
     ingress: 'dom', method: 'needs-adapter', count: 0, sample: [],
     jsRendered: looksJsRendered(html),
     note: looksJsRendered(html)
-      ? 'Page looks client-rendered — learn-this-site may find little in static HTML; the extension is the better path here.'
-      : 'No ATS/JSON-LD found — try “Learn this site”.',
+      ? 'Page looks client-rendered. Learn-this-site may find little in static HTML; the extension is the better path here.'
+      : 'No ATS/JSON-LD found. Try “Learn this site”.',
   };
 }

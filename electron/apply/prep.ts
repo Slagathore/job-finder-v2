@@ -17,7 +17,7 @@ function renderPrepHtml(job: any, prep: PrepDoc): string {
     body{font:14px/1.6 -apple-system,Segoe UI,sans-serif;max-width:760px;margin:32px auto;padding:0 24px;color:#1a1a1a}
     h1{font-size:22px} h2{font-size:16px;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:24px} li{margin:6px 0}
   </style></head><body>
-    <h1>Interview prep — ${esc(job.title)} @ ${esc(job.company)}</h1>
+    <h1>Interview prep: ${esc(job.title)} @ ${esc(job.company)}</h1>
     <h2>Likely questions</h2><ul>${li(prep.questions)}</ul>
     <h2>Your stories (STAR)</h2><ul>${stories}</ul>
     <h2>Questions to ask them</h2><ul>${li(prep.askThem)}</ul>

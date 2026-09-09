@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../llm/provider';
 import { parseJsonLoose, stripThinking } from '../lib/json';
 import { TOOL_SPECS, TOOL_NAMES } from './tools';
+import { buildInterviewPrompt, parseInterviewReply, normalizeMode, type AgentMode } from './interview';
 
 export interface PlanStep { tool: string; args: Record<string, any>; reason?: string; }
 export interface Plan { summary: string; steps: PlanStep[]; }
@@ -31,9 +32,11 @@ Rules:
 }
 
 export function buildPlannerPrompt(message: string, context: string, history: ChatMessage[] = []): ChatMessage[] {
+  // ONE system message on purpose. Verified against kimi-k2.7-code:cloud through
+  // the native Ollama /api/chat route: a second system message is dropped, so a
+  // split prompt loses the app context entirely and the model answers blind.
   return [
-    { role: 'system', content: plannerSystemPrompt() },
-    { role: 'system', content: `Current app context:\n${context}` },
+    { role: 'system', content: `${plannerSystemPrompt()}\n\nCurrent app context:\n${context}` },
     ...history,
     { role: 'user', content: message },
   ];
@@ -57,4 +60,25 @@ export function parsePlan(text: string): ParsedPlan {
     steps.push({ tool: s.tool, args: s.args && typeof s.args === 'object' ? s.args : {}, reason: s.reason });
   }
   return { intent: 'valid', plan: { summary: typeof p.summary === 'string' ? p.summary : '', steps } };
+}
+
+// ── Mode routing ─────────────────────────────────────────────────────────────
+// The console has two modes. "agent" is the plan-JSON tool driver above.
+// "interview" is a conversational coach that never drives tools. Both the
+// prompt and the parser have to switch together, so the routing lives here and
+// is unit tested.
+
+export function buildPromptForMode(
+  mode: AgentMode,
+  message: string,
+  context: string,
+  history: ChatMessage[] = []
+): ChatMessage[] {
+  return normalizeMode(mode) === 'interview'
+    ? buildInterviewPrompt(message, context, history)
+    : buildPlannerPrompt(message, context, history);
+}
+
+export function parseForMode(mode: AgentMode, text: string): ParsedPlan {
+  return normalizeMode(mode) === 'interview' ? parseInterviewReply(text) : parsePlan(text);
 }

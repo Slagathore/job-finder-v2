@@ -38,7 +38,7 @@ export async function runDoctor(): Promise<DoctorCheck[]> {
     const ok = h.ollamaUp || h.anthropicConfigured;
     checks.push({
       name: 'AI backend', ok,
-      detail: h.ollamaUp ? `Ollama up · ${s.primaryModel}` : h.anthropicConfigured ? 'Ollama down — Anthropic fallback available' : 'no Ollama, no Anthropic key — AI features disabled',
+      detail: h.ollamaUp ? `Ollama up · ${s.primaryModel}` : h.anthropicConfigured ? 'Ollama down, Anthropic fallback available' : 'no Ollama, no Anthropic key, AI features disabled',
     });
   } catch (e: any) {
     checks.push({ name: 'AI backend', ok: false, detail: e?.message ?? String(e) });
@@ -50,13 +50,13 @@ export async function runDoctor(): Promise<DoctorCheck[]> {
     const res = await fetch(`http://127.0.0.1:${port}/ping`, { signal: AbortSignal.timeout(3000) });
     checks.push({ name: 'Extension hub', ok: res.ok, detail: res.ok ? `listening on ${port}` : `ping returned HTTP ${res.status}` });
   } catch {
-    checks.push({ name: 'Extension hub', ok: false, detail: `nothing answering on port ${Number(s.hubPort) || 17893} — is another app holding it?` });
+    checks.push({ name: 'Extension hub', ok: false, detail: `nothing answering on port ${Number(s.hubPort) || 17893}, is another app holding it?` });
   }
 
   // 4. Extension actually paired (has it ever delivered?)
   try {
     const n = (getDb().prepare("SELECT COUNT(*) n FROM jobs WHERE source IN ('extension','indeed','linkedin','careerbuilder','glassdoor','ziprecruiter')").get() as { n: number }).n;
-    checks.push({ name: 'Extension pairing', ok: n > 0 || !!s.hubToken, detail: n > 0 ? `${n} jobs harvested via extension` : 'token ready — no harvests received yet (load the extension and click Harvest)' });
+    checks.push({ name: 'Extension pairing', ok: n > 0 || !!s.hubToken, detail: n > 0 ? `${n} jobs harvested via extension` : 'token ready, no harvests received yet (load the extension and click Harvest)' });
   } catch (e: any) {
     checks.push({ name: 'Extension pairing', ok: false, detail: e?.message ?? String(e) });
   }
@@ -64,19 +64,19 @@ export async function runDoctor(): Promise<DoctorCheck[]> {
   // 5. Boards
   try {
     const n = (getDb().prepare('SELECT COUNT(*) n FROM boards WHERE enabled = 1').get() as { n: number }).n;
-    checks.push({ name: 'Scan boards', ok: n > 0, detail: n > 0 ? `${n} boards enabled` : 'no boards enabled — Boards tab' });
+    checks.push({ name: 'Scan boards', ok: n > 0, detail: n > 0 ? `${n} boards enabled` : 'no boards enabled, see the Boards tab' });
   } catch (e: any) {
     checks.push({ name: 'Scan boards', ok: false, detail: e?.message ?? String(e) });
   }
 
   // 6. Candidate profile (used on tailored resumes)
   const contactOk = !!(s.candidateName && s.candidateEmail);
-  checks.push({ name: 'Contact details', ok: contactOk, detail: contactOk ? `${s.candidateName} <${s.candidateEmail}>` : 'name/email missing — Settings (used on generated resumes)' });
+  checks.push({ name: 'Contact details', ok: contactOk, detail: contactOk ? `${s.candidateName} <${s.candidateEmail}>` : 'name/email missing, set them in Settings (used on generated resumes)' });
 
   // 7. Experience engine
   try {
     const n = (getDb().prepare('SELECT COUNT(*) n FROM experience_items').get() as { n: number }).n;
-    checks.push({ name: 'Experience engine', ok: n > 0, detail: n > 0 ? `${n} line items` : 'no line items — import a résumé in the Experience tab' });
+    checks.push({ name: 'Experience engine', ok: n > 0, detail: n > 0 ? `${n} line items` : 'no line items, import a résumé in the Experience tab' });
   } catch (e: any) {
     checks.push({ name: 'Experience engine', ok: false, detail: e?.message ?? String(e) });
   }
@@ -86,8 +86,8 @@ export async function runDoctor(): Promise<DoctorCheck[]> {
   checks.push({
     name: 'Secret storage', ok: secretsOk,
     detail: secretsOk
-      ? 'OS encryption available — API keys and tokens are encrypted at rest'
-      : 'NO OS keychain — API keys and Gmail tokens cannot be saved. On Linux, install gnome-keyring/libsecret and restart.',
+      ? 'OS encryption available, API keys and tokens are encrypted at rest'
+      : 'NO OS keychain. API keys and Gmail tokens cannot be saved. On Linux, install gnome-keyring/libsecret and restart.',
   });
 
   // 9. Gmail (optional — only flagged if configured but broken-looking)

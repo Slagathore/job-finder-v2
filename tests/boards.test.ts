@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractJsonLdJobs } from '../electron/boards/jsonld';
 import { parseAdapter, applyAdapter } from '../electron/boards/learn';
+import { isHostileAggregator } from '../electron/boards/hostile';
 
 describe('extractJsonLdJobs', () => {
   it('parses a single JobPosting', () => {
@@ -41,6 +42,29 @@ describe('parseAdapter', () => {
   it('accepts complete selectors, rejects incomplete', () => {
     expect(parseAdapter('{"list":".job","title":".t","url":"a"}')).toMatchObject({ list: '.job', title: '.t', url: 'a' });
     expect(parseAdapter('{"list":".job"}')).toBeNull();
+  });
+});
+
+describe('isHostileAggregator', () => {
+  it('flags the known hostile aggregator domains, with or without www.', () => {
+    expect(isHostileAggregator('https://www.indeed.com')).toBe(true);
+    expect(isHostileAggregator('https://indeed.com/jobs?q=engineer')).toBe(true);
+    expect(isHostileAggregator('https://www.linkedin.com/jobs')).toBe(true);
+    expect(isHostileAggregator('https://www.glassdoor.com')).toBe(true);
+    expect(isHostileAggregator('https://www.ziprecruiter.com')).toBe(true);
+    expect(isHostileAggregator('https://www.careerbuilder.com')).toBe(true);
+  });
+  it('flags a country/region subdomain', () => {
+    expect(isHostileAggregator('https://de.indeed.com/jobs')).toBe(true);
+  });
+  it('does not flag an unrelated domain, including one that merely contains the word', () => {
+    expect(isHostileAggregator('https://boards.greenhouse.io/acme')).toBe(false);
+    expect(isHostileAggregator('https://not-indeed.com')).toBe(false);
+    expect(isHostileAggregator('https://indeed.com.evil.example')).toBe(false);
+  });
+  it('handles a bare hostname and empty input without throwing', () => {
+    expect(isHostileAggregator('indeed.com')).toBe(true);
+    expect(isHostileAggregator('')).toBe(false);
   });
 });
 

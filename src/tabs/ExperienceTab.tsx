@@ -1,5 +1,39 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { confirmDialog, toast } from '../lib/feedback';
+import { ProjectsCard } from '../components/ProjectsCard';
+
+/** Scroll a just-arrived result into view and give it a brief highlight ring, so a
+ *  result that lands far down the page (roast, analyze, gap questions) doesn't read as
+ *  the button having done nothing.
+ *
+ *  Driven from a useEffect keyed on `revealKey` rather than being called straight out of
+ *  the click handler: the target element is conditionally rendered, so at the moment the
+ *  handler's setState call runs, React has not yet committed the new element and a ref
+ *  read there is still null. Bumping revealKey lets the effect run after commit. Retries
+ *  across a few animation frames for a slow render, and reports a toast instead of
+ *  silently doing nothing if the target still never mounts. */
+function useRevealOnChange(ref: React.RefObject<HTMLElement>, revealKey: number) {
+  useEffect(() => {
+    if (revealKey === 0) return; // 0 = nothing produced yet
+    let cancelled = false;
+    let attempts = 0;
+    const tryReveal = () => {
+      if (cancelled) return;
+      const el = ref.current;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('flash-in');
+        window.setTimeout(() => el.classList.remove('flash-in'), 1600);
+        return;
+      }
+      attempts++;
+      if (attempts < 20) requestAnimationFrame(tryReveal);
+      else toast('Result is ready but the page could not scroll to it. Look further down the page.', 'error');
+    };
+    requestAnimationFrame(tryReveal);
+    return () => { cancelled = true; };
+  }, [revealKey]);
+}
 
 export function ExperienceTab() {
   const [items, setItems] = useState<any[]>([]);
@@ -17,6 +51,16 @@ export function ExperienceTab() {
   const [stories, setStories] = useState<any[]>([]);
   const [storyPrompt, setStoryPrompt] = useState('');
   const [storyText, setStoryText] = useState('');
+
+  const analyzeRef = useRef<HTMLDivElement>(null);
+  const questionsRef = useRef<HTMLDivElement>(null);
+  const roastRef = useRef<HTMLPreElement>(null);
+  const [analyzeRevealKey, setAnalyzeRevealKey] = useState(0);
+  const [questionsRevealKey, setQuestionsRevealKey] = useState(0);
+  const [roastRevealKey, setRoastRevealKey] = useState(0);
+  useRevealOnChange(analyzeRef, analyzeRevealKey);
+  useRevealOnChange(questionsRef, questionsRevealKey);
+  useRevealOnChange(roastRef, roastRevealKey);
 
   async function refresh() {
     try {
@@ -43,7 +87,7 @@ export function ExperienceTab() {
     await window.api.stories.delete(id);
     setStories(await window.api.stories.list());
   }
-  const NEED_AI = 'No line items created — the AI isn’t connected. Start Ollama (and `ollama pull nomic-embed-text`) or set an Anthropic key in Settings.';
+  const NEED_AI = 'No line items created. The AI isn’t connected. Start Ollama (and `ollama pull nomic-embed-text`) or set an Anthropic key in Settings.';
   useEffect(() => { refresh(); }, []);
 
   async function addRule() {
@@ -67,8 +111,8 @@ export function ExperienceTab() {
     const r = await window.api.experience.importFile(fp);
     setBusy('');
     if ('error' in r) toast(r.error, 'error');
-    else if (r.added === 0) toast(NEED_AI, 'error');
-    else toast(`Added ${r.added} line items from ${r.source}.`, 'success');
+    else if (!r.items) toast(NEED_AI, 'error');
+    else toast(`Added ${r.added} line items from ${r.source}${r.merged ? `, merged ${r.merged} duplicate${r.merged === 1 ? '' : 's'} into existing entries` : ''}.`, 'success');
     refresh();
   }
 
@@ -78,8 +122,8 @@ export function ExperienceTab() {
     const r = await window.api.experience.importText(paste, 'pasted');
     setBusy('');
     if ('error' in r) toast(r.error, 'error');
-    else if (r.added === 0) toast(NEED_AI, 'error');
-    else { toast(`Added ${r.added} line items.`, 'success'); setPaste(''); }
+    else if (!r.items) toast(NEED_AI, 'error');
+    else { toast(`Added ${r.added} line items${r.merged ? `, merged ${r.merged} duplicate${r.merged === 1 ? '' : 's'}` : ''}.`, 'success'); setPaste(''); }
     refresh();
   }
 
@@ -88,14 +132,17 @@ export function ExperienceTab() {
     const r = await window.api.experience.infer();
     setBusy('');
     if ('error' in r) toast(r.error, 'error');
-    else { setProfile(r.profile); setRoleFits(r.roleFits); }
+    else { setProfile(r.profile); setRoleFits(r.roleFits); setAnalyzeRevealKey(k => k + 1); }
   }
 
   async function getQuestions() {
     setBusy('Thinking of questions…');
     const r = await window.api.experience.suggestQuestions();
     setBusy('');
-    setQuestions('error' in r ? [] : r.questions);
+    if ('error' in r) { setQuestions([]); toast(r.error, 'error'); return; }
+    setQuestions(r.questions);
+    if (!r.questions.length) toast('No gap questions came back. The model may not be connected.', 'error');
+    else setQuestionsRevealKey(k => k + 1);
   }
 
   async function digestAnswers() {
@@ -112,6 +159,7 @@ export function ExperienceTab() {
     const r = await window.api.experience.roast();
     setBusy('');
     setRoast('error' in r ? `⚠️ ${r.error}` : r.text);
+    setRoastRevealKey(k => k + 1);
   }
   async function del(id: number) { await window.api.experience.delete(id); refresh(); }
   async function clearAll() {
@@ -123,7 +171,7 @@ export function ExperienceTab() {
   return (
     <div className="panel" style={{ maxWidth: 900 }}>
       <h1>Experience</h1>
-      {llmDown && <div className="banner">⚠️ AI not connected — importing &amp; analyzing need it. Start <b>Ollama</b> (then <code>ollama pull nomic-embed-text</code>) or add an <b>Anthropic key</b> in Settings.</div>}
+      {llmDown && <div className="banner">⚠️ AI not connected. Importing &amp; analyzing need it. Start <b>Ollama</b> (then <code>ollama pull nomic-embed-text</code>) or add an <b>Anthropic key</b> in Settings.</div>}
       <p className="muted small">
         Import resumes or paste text. The model digests everything into atomic, reusable line items,
         then infers which role families &amp; industries you can target.
@@ -146,16 +194,18 @@ export function ExperienceTab() {
         <button className="primary" onClick={getQuestions} disabled={!!busy}>Suggest gap questions</button>
         <button className="primary" onClick={roastMe} disabled={!!busy || items.length === 0}>🔥 Roast my résumé</button>
       </div>
-      {roast && <pre className="out" style={{ whiteSpace: 'pre-wrap' }}>{roast}</pre>}
+      {roast && <pre ref={roastRef} className="out" style={{ whiteSpace: 'pre-wrap' }}>{roast}</pre>}
 
       {questions.length > 0 && (
-        <div className="qa">
+        <div ref={questionsRef} className="qa">
           <h2>Questions to fill gaps</h2>
           <ol>{questions.map((q, i) => <li key={i}>{q}</li>)}</ol>
           <textarea rows={4} placeholder="Answer any of the above here, then digest" value={answers} onChange={e => setAnswers(e.target.value)} />
           <div className="row"><button className="primary" onClick={digestAnswers} disabled={!answers.trim()}>Digest answers</button></div>
         </div>
       )}
+
+      <ProjectsCard onChanged={refresh} />
 
       <div className="profile-card" style={{ marginTop: 12 }}>
         <h2>Rules</h2>
@@ -182,12 +232,12 @@ export function ExperienceTab() {
 
       <div className="profile-card" style={{ marginTop: 12 }}>
         <h2>Story bank</h2>
-        <p className="muted small">Your reusable STAR interview stories. Interview prep saves its generated stories here and reuses them for future jobs — refine the good ones, delete the weak ones.</p>
+        <p className="muted small">Your reusable STAR interview stories. Interview prep saves its generated stories here and reuses them for future jobs. Refine the good ones, delete the weak ones.</p>
         <div className="addform">
           <input placeholder="behavioral question (e.g. tell me about a time you handled conflict)" value={storyPrompt} onChange={e => setStoryPrompt(e.target.value)} />
           <button className="primary" onClick={addStoryManual}>Add</button>
         </div>
-        <textarea placeholder="the story — situation, task, action, result" value={storyText} onChange={e => setStoryText(e.target.value)}
+        <textarea placeholder="the story: situation, task, action, result" value={storyText} onChange={e => setStoryText(e.target.value)}
           style={{ width: '100%', minHeight: 60, marginTop: 6 }} />
         {stories.length > 0 && (
           <ul className="rules">
@@ -201,7 +251,7 @@ export function ExperienceTab() {
       </div>
 
       {profile && (
-        <div className="profile-card">
+        <div ref={analyzeRef} className="profile-card">
           <h2>Profile</h2>
           {profile.narrative && <p>{profile.narrative}</p>}
           <p className="muted small">

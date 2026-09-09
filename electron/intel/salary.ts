@@ -1,7 +1,7 @@
 import { generate, type ChatMessage } from '../llm/provider';
 import { getDb } from '../ipc/db';
 import { readSettings } from '../ipc/settings';
-import { parseSalary, type SalaryParsed } from './parse';
+import { parseSalary, backfillRange, type SalaryParsed } from './parse';
 import { blsMedianForSoc } from './bls';
 
 export interface SalaryEstimate extends SalaryParsed {
@@ -32,6 +32,7 @@ export async function estimateSalary(jobId: number): Promise<SalaryEstimate | { 
       const bls = await blsMedianForSoc(est.soc);
       if (bls) { est.blsMedian = bls.annualMedian; est.blsYear = bls.year; est.source = 'llm-estimate+bls'; }
     }
+    backfillRange(est);
     db.prepare('UPDATE jobs SET salary_estimate = ? WHERE id = ?').run(JSON.stringify(est), jobId);
     return est;
   } catch (e: any) { return { error: e?.message ?? String(e) }; }

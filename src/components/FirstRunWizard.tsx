@@ -30,7 +30,7 @@ export function FirstRunWizard({ onDone }: { onDone: () => void }) {
         }
       }
       await window.api.settings.set(patch);
-      if (!skipped) toast('You’re set up — the Dashboard checklist tracks the rest.', 'success');
+      if (!skipped) toast('You’re set up. The Dashboard checklist tracks the rest.', 'success');
     } catch (e: any) {
       toast(String(e?.message ?? e), 'error');
     } finally {
@@ -55,7 +55,7 @@ export function FirstRunWizard({ onDone }: { onDone: () => void }) {
       canNext: true,
       body: (
         <>
-          <p className="muted small">Used on your tailored resumes and cover letters — never sent anywhere else.</p>
+          <p className="muted small">Used on your tailored resumes and cover letters, never sent anywhere else.</p>
           <input placeholder="your name" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', marginBottom: 8 }} />
           <input placeholder="your email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%' }} />
         </>
@@ -68,7 +68,7 @@ export function FirstRunWizard({ onDone }: { onDone: () => void }) {
         <>
           <p className="muted small">AI powers matching, resume digestion, and tailoring. Scanning and tracking work fine without it.</p>
           <label style={{ display: 'block', margin: '6px 0' }}>
-            <input type="radio" checked={ai === 'ollama'} onChange={() => setAi('ollama')} /> I run <b>Ollama</b> locally (free — also run <code>ollama pull nomic-embed-text</code>)
+            <input type="radio" checked={ai === 'ollama'} onChange={() => setAi('ollama')} /> I run <b>Ollama</b> locally (free, also run <code>ollama pull nomic-embed-text</code>)
           </label>
           <label style={{ display: 'block', margin: '6px 0' }}>
             <input type="radio" checked={ai === 'anthropic'} onChange={() => setAi('anthropic')} /> Use an <b>Anthropic API key</b>
@@ -85,12 +85,12 @@ export function FirstRunWizard({ onDone }: { onDone: () => void }) {
       canNext: true,
       body: (
         <>
-          <p className="muted small">The app ships with 35 company boards it can scan immediately — mostly tech/AI companies. Not your field? Start empty and add your own targets in the Boards tab (paste any careers-page URL; it learns the rest).</p>
+          <p className="muted small">The app ships with 35 company boards it can scan immediately, mostly tech/AI companies. Not your field? Start empty and add your own targets in the Boards tab (paste any careers-page URL; it learns the rest).</p>
           <label style={{ display: 'block', margin: '6px 0' }}>
-            <input type="radio" checked={boards === 'keep'} onChange={() => setBoards('keep')} /> <b>Keep them</b> — good for trying the app right now
+            <input type="radio" checked={boards === 'keep'} onChange={() => setBoards('keep')} /> <b>Keep them</b>: good for trying the app right now
           </label>
           <label style={{ display: 'block', margin: '6px 0' }}>
-            <input type="radio" checked={boards === 'clear'} onChange={() => setBoards('clear')} /> <b>Start empty</b> — I'll add boards for my own field
+            <input type="radio" checked={boards === 'clear'} onChange={() => setBoards('clear')} /> <b>Start empty</b>: I'll add boards for my own field
           </label>
         </>
       ),

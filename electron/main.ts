@@ -4,9 +4,10 @@ import { initDb } from './ipc/db';
 import { registerSettingsHandlers, readSettings, writeSetting, migrateSecrets } from './ipc/settings';
 import { registerLlmHandlers } from './ipc/llm';
 import { registerJobHandlers } from './ipc/jobs';
-import { registerBoardHandlers, seedBoardsIfEmpty } from './ipc/boards';
+import { correctHostileBoards, registerBoardHandlers, seedBoardsIfEmpty } from './ipc/boards';
 import { registerScanHandlers } from './ipc/scan';
 import { registerExperienceHandlers } from './ipc/experience';
+import { registerProjectHandlers } from './ipc/projects';
 import { registerDiscoveryHandlers } from './ipc/discovery';
 import { registerGeoHandlers } from './ipc/geo';
 import { registerRuleHandlers } from './ipc/rules';
@@ -41,6 +42,8 @@ import { runEmbeddings, discover } from './discovery/service';
 import { discoverBoardsFromJobs } from './boards/autodiscover';
 import { collapseAggregatorDupes } from './maintenance/dedupe';
 import { runBackup } from './maintenance/backup';
+import { sweepLiveness } from './apply/liveness-sweep';
+import { geocodeJobs } from './geo/geocode';
 import type { Server } from 'http';
 
 // Dev = unpackaged AND not forced to prod. JF_PROD lets `npm start` / a smoke
@@ -89,6 +92,7 @@ function shutdown(): void {
   if (backupTimer) { clearInterval(backupTimer); backupTimer = null; }
   if (embedTimer) { clearTimeout(embedTimer); embedTimer = null; }
   if (atsTimer) { clearTimeout(atsTimer); atsTimer = null; }
+  if (geocodeTimer) { clearTimeout(geocodeTimer); geocodeTimer = null; }
   try { hubServer?.closeAllConnections?.(); hubServer?.close(); } catch { /* */ }
   killAllChildren();
   try { tray?.destroy(); tray = null; } catch { /* */ }
@@ -167,14 +171,31 @@ async function scheduledTick(trigger: 'manual' | 'scheduled'): Promise<void> {
     const s = await runScan(trigger);
     console.log(`[scheduler] scan: +${s.added} jobs (${s.found} found, ${s.scanned} boards)`);
     try { collapseAggregatorDupes(); } catch (e: any) { console.error('[dedupe]', e?.message ?? e); }
+    // Background liveness re-check (bounded, throttled — see apply/liveness-sweep.ts):
+    // runs every tick regardless of whether this scan found anything new, since its job
+    // is re-checking postings the app already has, not the fresh ones.
+    try {
+      const lv = await sweepLiveness();
+      if (lv.checked > 0) console.log(`[liveness-sweep] checked ${lv.checked}, ${lv.markedDead} confirmed dead`);
+      if (lv.markedDead > 0) send('notify');
+    } catch (e: any) { console.error('[liveness-sweep] failed:', e?.message ?? e); }
     if (s.added > 0) {
       let topLine = '';
       try {
         await runEmbeddings(false);
         const d = await discover(20);
         const top = (d.results ?? [])[0];
-        if (top?.sim) topLine = ` · top fit ${Math.round(top.sim * 100)}%: ${top.title} @ ${top.company}`;
+        // top.sim is a raw retrieval similarity, not a calibrated score — never shown as a
+        // percentage (that's the whole point of the fit-score redesign). Only the cached
+        // LLM rubric grade (A-F) is trustworthy enough to put in front of Cole here; if the
+        // top hit hasn't been graded yet, name it without inventing a number.
+        if (top) {
+          topLine = top.fit_grade
+            ? ` · top fit ${top.fit_grade}: ${top.title} @ ${top.company}`
+            : ` · top pick (not yet graded): ${top.title} @ ${top.company}`;
+        }
       } catch (e: any) { console.error('[scheduler] embed/discover skipped:', e?.message ?? e); }
+      scheduleAutoGeocode();
       try { addNotification('jobs', { added: s.added, found: s.found, scanned: s.scanned, topLine }); } catch { /* */ }
       if (readSettings().notifyOnNewJobs) {
         notify(`${s.added} new job${s.added === 1 ? '' : 's'} from the latest scan${topLine}`, 'search');
@@ -245,7 +266,7 @@ function createWindow() {
       try {
         if (!readSettings().trayHintShown) {
           writeSetting('trayHintShown', true);
-          notify('Job Finder is still running in the system tray — scheduled scans and the extension keep working. Right-click the tray icon to quit, or turn this off in Settings.');
+          notify('Job Finder is still running in the system tray. Scheduled scans and the extension keep working. Right-click the tray icon to quit, or turn this off in Settings.');
         }
       } catch { /* */ }
     } else {
@@ -294,6 +315,23 @@ function scheduleAutoEmbed() {
   }, 20_000);
 }
 
+// Auto-geocode newly harvested jobs (no more manual "Geocode job locations" click needed
+// before the Dist column fills in). Same debounce pattern as auto-embed, bounded batch so
+// a big harvest still respects Nominatim's throttle inside geo/geocode.ts.
+const AUTO_GEOCODE_BATCH = 20;
+let geocodeTimer: NodeJS.Timeout | null = null;
+function scheduleAutoGeocode() {
+  if (geocodeTimer) clearTimeout(geocodeTimer);
+  geocodeTimer = setTimeout(() => {
+    geocodeTimer = null;
+    geocodeJobs(AUTO_GEOCODE_BATCH)
+      .then(r => {
+        if (r.resolved > 0) { console.log(`[auto-geocode] ${r.resolved} jobs geocoded`); send('notify'); }
+      })
+      .catch(err => console.error('[auto-geocode] failed:', err?.message ?? err));
+  }, 20_000);
+}
+
 // One stale alarm per site per 6h — a broken scraper shouldn't spam.
 const staleAlerted = new Map<string, number>();
 function scraperStale(site: string, url: string) {
@@ -301,7 +339,9 @@ function scraperStale(site: string, url: string) {
   if (Date.now() - last < 6 * 3600_000) return;
   staleAlerted.set(site, Date.now());
   try { addNotification('scraper-stale', { site, url }); } catch { /* */ }
-  notify(`${site} scraper found 0 jobs on a results page — selectors may be stale.`);
+  // Deliberately avoids the word "stale": that reads like the Boards-tab
+  // re-learn flow, which does not apply to hand-written extension scrapers.
+  notify(`${site} harvest found 0 jobs on a results page. The site's layout probably changed, which needs a scraper update in the extension code.`);
   send('notify');
 }
 
@@ -317,7 +357,7 @@ function scheduleAtsDiscovery() {
       .then(found => {
         if (!found.length) return;
         try { addNotification('boards', { added: found.length, names: found.map(f => f.company) }); } catch { /* */ }
-        notify(`Found ${found.length} direct company board${found.length === 1 ? '' : 's'}: ${found.map(f => f.company).join(', ')} — future scans cover them automatically.`, 'boards');
+        notify(`Found ${found.length} direct company board${found.length === 1 ? '' : 's'}: ${found.map(f => f.company).join(', ')}. Future scans cover them automatically.`, 'boards');
         send('notify');
       })
       .catch(err => console.error('[ats-discover] failed:', err?.message ?? err));
@@ -331,7 +371,7 @@ function startIngressServer() {
     token: readSettings().hubToken,
     ingestJobs: (jobs: any[]) => {
       const r = ingestJobs(jobs);
-      if (r.added > 0 || r.updated > 0) { send('notify'); scheduleAutoEmbed(); scheduleAtsDiscovery(); }
+      if (r.added > 0 || r.updated > 0) { send('notify'); scheduleAutoEmbed(); scheduleAtsDiscovery(); scheduleAutoGeocode(); }
       return r;
     },
     ingestFields,
@@ -348,7 +388,7 @@ function startIngressServer() {
   // instead of burying it in the console.
   hubServer.on('error', (err: any) => {
     if (err?.code === 'EADDRINUSE') {
-      try { addNotification('hub', { error: `Port ${port} is already in use — extension pairing is offline.` }); } catch { /* */ }
+      try { addNotification('hub', { error: `Port ${port} is already in use, extension pairing is offline.` }); } catch { /* */ }
       notify(`Extension hub couldn't start: port ${port} is in use. Close the other program or change the hub port in Settings.`, 'settings');
       send('notify');
     }
@@ -410,6 +450,7 @@ app.whenReady().then(async () => {
   initDb();
   migrateSecrets();
   seedBoardsIfEmpty();
+  correctHostileBoards();
   closeToTray = !!readSettings().closeToTray;
   registerSettingsHandlers();
   registerLlmHandlers();
@@ -417,7 +458,8 @@ app.whenReady().then(async () => {
   registerBoardHandlers();
   registerScanHandlers();
   registerExperienceHandlers();
-  registerDiscoveryHandlers();
+  registerProjectHandlers({ onProgress: p => send('projects:progress', p) });
+  registerDiscoveryHandlers({ onGradeProgress: p => send('discovery:gradeProgress', p) });
   registerGeoHandlers();
   registerRuleHandlers();
   registerApplyHandlers();

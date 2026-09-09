@@ -1,5 +1,5 @@
 import { generate, type ChatMessage } from '../llm/provider';
-import { parseJsonLoose } from '../lib/json';
+import { parseJsonLoose, recoverTruncatedArray, stripThinking } from '../lib/json';
 import type { Settings } from '../ipc/settings';
 import type { LineItem } from './digest';
 
@@ -52,9 +52,31 @@ export function buildProfilePrompt(items: LineItem[]): ChatMessage[] {
   ];
 }
 
+function roleFit(r: any): RoleFit {
+  return {
+    role_family: r.role_family.trim(),
+    industry: r.industry ?? null,
+    taxonomy_code: r.taxonomy_code ?? null,
+    confidence: typeof r.confidence === 'number' ? Math.max(0, Math.min(1, r.confidence)) : 0.5,
+    rationale: r.rationale ?? null,
+  };
+}
+
 export function parseProfileResult(llmText: string): { profile: DerivedProfile; roleFits: RoleFit[] } {
+  const cleaned = stripThinking(llmText);
   const p = parseJsonLoose<any>(llmText) ?? {};
-  const prof = p.profile ?? {};
+
+  // A thinking model's reasoning eats the completion budget, so the response
+  // often gets cut off before its outermost object ever closes, and a strict
+  // JSON.parse over the whole thing then fails even though the "profile"
+  // object nested inside it (written first, before role_fits) is itself
+  // complete. Recover it directly by its own key rather than losing it along
+  // with everything after it.
+  let prof = p.profile;
+  if (!prof || typeof prof !== 'object') {
+    const key = cleaned.indexOf('"profile"');
+    prof = key >= 0 ? (parseJsonLoose<any>(cleaned.slice(key)) ?? {}) : {};
+  }
   const profile: DerivedProfile = {
     skills: Array.isArray(prof.skills) ? prof.skills.map(String) : [],
     domains: Array.isArray(prof.domains) ? prof.domains.map(String) : [],
@@ -62,22 +84,39 @@ export function parseProfileResult(llmText: string): { profile: DerivedProfile; 
     total_yoe: typeof prof.total_yoe === 'number' ? prof.total_yoe : null,
     narrative: prof.narrative ?? null,
   };
-  const roleFits: RoleFit[] = (Array.isArray(p.role_fits) ? p.role_fits : [])
+
+  // Same idea for role_fits, which is written after profile and so is the
+  // part most likely to be mid-array when the budget runs out. Anchor on the
+  // "role_fits" key itself (not the first '[' in the whole response, which is
+  // usually profile.skills) and recover whatever complete objects made it
+  // through before the cutoff.
+  let rawRoleFits: any[] = Array.isArray(p.role_fits) ? p.role_fits : [];
+  if (!rawRoleFits.length) {
+    const key = cleaned.indexOf('"role_fits"');
+    if (key >= 0) rawRoleFits = recoverTruncatedArray<any>(cleaned.slice(key)) ?? [];
+  }
+  const roleFits: RoleFit[] = rawRoleFits
     .filter((r: any) => r && typeof r.role_family === 'string' && r.role_family.trim())
-    .map((r: any) => ({
-      role_family: r.role_family.trim(),
-      industry: r.industry ?? null,
-      taxonomy_code: r.taxonomy_code ?? null,
-      confidence: typeof r.confidence === 'number' ? Math.max(0, Math.min(1, r.confidence)) : 0.5,
-      rationale: r.rationale ?? null,
-    }));
+    .map(roleFit);
+
+  // An unusable LLM response must surface as an error, not as a silently empty
+  // profile card that looks to the user like the button did nothing. Name the
+  // real cause (truncated/unparseable output) rather than blaming the
+  // connection, since the connection is usually fine.
+  if (!profile.skills.length && !profile.domains.length && !profile.narrative && !roleFits.length) {
+    throw new Error(
+      `No usable profile came back from the model (${llmText.length} characters, nothing recoverable from it). ` +
+      `This usually means the response was truncated before it finished, not that the LLM connection is down. ` +
+      `Try again, or reduce how much experience is analyzed at once.`
+    );
+  }
   return { profile, roleFits };
 }
 
 export async function inferProfileAndRoles(
   s: Settings, items: LineItem[]
 ): Promise<{ profile: DerivedProfile; roleFits: RoleFit[] }> {
-  const r = await generate(s, buildProfilePrompt(items), { temperature: 0.3, maxTokens: 6000 });
+  const r = await generate(s, buildProfilePrompt(items), { temperature: 0.3, maxTokens: 10000 });
   return parseProfileResult(r.text);
 }
 

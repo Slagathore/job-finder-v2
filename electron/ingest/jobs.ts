@@ -1,6 +1,8 @@
 import { getDb } from '../ipc/db';
 import { inferWorkMode } from '../scan/ats';
 import { normalizeJobUrl } from './url';
+import { parsePostedAt, deriveExpiresAt } from './posted';
+import { collapseAggregatorDupes } from '../maintenance/dedupe';
 
 export { normalizeJobUrl };
 
@@ -12,6 +14,8 @@ export interface RawJob {
   source?: string;
   description?: string;
   salary?: string;
+  /** Relative or absolute posting date text from the board, e.g. "Posted 3 days ago". */
+  postedText?: string;
 }
 
 /**
@@ -31,8 +35,10 @@ export function ingestJobs(raw: RawJob[]): { added: number; duplicates: number; 
   for (const r of db.prepare('SELECT url FROM scan_history').all() as { url: string }[]) if (r.url) seen.add(r.url);
 
   const insertJob = db.prepare(`
-    INSERT INTO jobs (source, url, company, title, description, location_raw, work_mode, salary_listed, first_seen, status)
-    VALUES (@source, @url, @company, @title, @description, @location_raw, @work_mode, @salary_listed, @first_seen, 'discovered')
+    INSERT INTO jobs (source, url, company, title, description, location_raw, work_mode, salary_listed,
+                      first_seen, posted_at, expires_at, status)
+    VALUES (@source, @url, @company, @title, @description, @location_raw, @work_mode, @salary_listed,
+            @first_seen, @posted_at, @expires_at, 'discovered')
     ON CONFLICT(url) DO NOTHING
   `);
   const insertHist = db.prepare(
@@ -66,17 +72,27 @@ export function ingestJobs(raw: RawJob[]): { added: number; duplicates: number; 
       }
       seen.add(url);
       const source = j.source || 'extension';
+      const postedAt = parsePostedAt(j.postedText, now);
       const res = insertJob.run({
         source, url, company: j.company ?? '', title: j.title.trim(),
         description: j.description ?? null, location_raw: j.location ?? '',
         work_mode: inferWorkMode(j.location ?? ''), salary_listed: j.salary?.trim() || null,
         first_seen: now,
+        posted_at: postedAt,
+        expires_at: deriveExpiresAt(postedAt, now),
       });
       if (res.changes > 0) { added++; insertHist.run(url, now, source, j.title.trim(), j.company ?? ''); }
       else duplicates++;
     }
   });
   tx(raw);
+
+  // Collapse cross-source duplicates immediately rather than waiting for the
+  // next scheduled scan tick — a harvest that lands the same role from two
+  // boards should never show up twice in the very next search.
+  if (added > 0 || updated > 0) {
+    try { collapseAggregatorDupes(db); } catch (e) { console.warn('[ingest] dedupe failed', e); }
+  }
   return { added, duplicates, skipped, updated };
 }
 

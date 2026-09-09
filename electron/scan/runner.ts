@@ -4,6 +4,7 @@ import { buildTitleFilter, inferWorkMode, pool, type Offer } from './ats';
 import { scanOneBoard } from './scan-board';
 import { isWatched } from '../ipc/watch';
 import { addNotification } from '../ipc/notifications';
+import { isHostileAggregator } from '../boards/hostile';
 
 export interface ScanSummary {
   scanned: number;
@@ -59,6 +60,12 @@ async function doScan(trigger: 'manual' | 'scheduled' | 'agent'): Promise<ScanSu
   const newOffers: Offer[] = [];
 
   await pool(boards, 8, async (board) => {
+    // Hostile aggregators (Indeed, LinkedIn, ...) are JS-rendered and actively
+    // anti-bot: a DOM scan against them always comes back empty, which would
+    // otherwise trip the auto-learning "adapter stale, re-learn" flag below
+    // for a re-learn that can never succeed. The browser extension harvests
+    // these instead, so they are not scanned here at all.
+    if (isHostileAggregator(board.url)) return;
     try {
       const offers = await scanOneBoard({ name: board.name, url: board.url });
       summary.scanned++;

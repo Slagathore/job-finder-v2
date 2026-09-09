@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld('api', {
     search: (params: any) => invoke('discovery:search', params),
     discover: (limit?: number) => invoke('discovery:discover', limit),
     grade: (jobId: number) => invoke('discovery:grade', jobId),
+    gradeTop: (jobIds: number[], force?: boolean) => invoke('discovery:gradeTop', { jobIds, force }),
+    onGradeProgress: (cb: (p: any) => void) => {
+      const l = (_e: any, p: any) => cb(p);
+      ipcRenderer.on('discovery:gradeProgress', l);
+      return () => ipcRenderer.removeListener('discovery:gradeProgress', l);
+    },
   },
   boards: {
     list: () => invoke('boards:list'),
@@ -50,6 +56,23 @@ contextBridge.exposeInMainWorld('api', {
     getProfile: () => invoke('experience:getProfile'),
     suggestQuestions: () => invoke('experience:suggestQuestions'),
     roast: () => invoke('experience:roast'),
+  },
+  projects: {
+    status: () => invoke('projects:status'),
+    list: () => invoke('projects:list'),
+    installGh: () => invoke('projects:installGh'),
+    saveToken: (token: string) => invoke('projects:saveToken', token),
+    clearToken: () => invoke('projects:clearToken'),
+    refresh: () => invoke('projects:refresh'),
+    scan: (depth?: 'medium' | 'deep') => invoke('projects:scan', { depth }),
+    deepDive: (fullName: string) => invoke('projects:deepDive', fullName),
+    digestFolder: (folder: string) => invoke('projects:digestFolder', folder),
+    digestUrl: (url: string) => invoke('projects:digestUrl', url),
+    onProgress: (cb: (p: any) => void) => {
+      const l = (_e: any, p: any) => cb(p);
+      ipcRenderer.on('projects:progress', l);
+      return () => ipcRenderer.removeListener('projects:progress', l);
+    },
   },
   rules: {
     list: () => invoke('rules:list'),
@@ -110,6 +133,8 @@ contextBridge.exposeInMainWorld('api', {
     company: (company: string, force?: boolean) => invoke('intel:company', { company, force }),
     moves: () => invoke('intel:moves'),
     certs: (field: string, force?: boolean) => invoke('intel:certs', { field, force }),
+    portfolio: () => invoke('intel:portfolio'),
+    portfolioRun: (force?: boolean) => invoke('intel:portfolioRun', force),
   },
   notifications: {
     list: () => invoke('notifications:list'),
@@ -123,12 +148,15 @@ contextBridge.exposeInMainWorld('api', {
     },
   },
   agent: {
-    plan: (message: string, history?: any[]) => invoke('agent:plan', { message, history }),
-    run: (steps: any[]) => invoke('agent:run', steps),
-    runStep: (step: any) => invoke('agent:runStep', step),
+    plan: (p: { message: string; conversationId?: number | null; mode?: string }) => invoke('agent:plan', p),
+    run: (steps: any[], messageId?: number | null) => invoke('agent:run', { steps, messageId }),
+    runStep: (step: any, messageId?: number | null, index?: number) => invoke('agent:runStep', { step, messageId, index }),
     permissions: () => invoke('agent:permissions'),
     setPermission: (capability: string, mode: string) => invoke('agent:setPermission', { capability, mode }),
     memory: () => invoke('agent:memory'),
+    conversations: () => invoke('agent:conversations'),
+    conversation: (id: number) => invoke('agent:conversation', id),
+    deleteConversation: (id: number) => invoke('agent:deleteConversation', id),
   },
   selfext: {
     propose: (instruction: string) => invoke('selfext:propose', instruction),
@@ -160,6 +188,13 @@ contextBridge.exposeInMainWorld('api', {
     project: (idea: string) => invoke('career:project', idea),
     training: (course: string) => invoke('career:training', course),
     deep: (company: string, role: string) => invoke('career:deep', { company, role }),
+    intakeGet: () => invoke('career:intakeGet'),
+    intakeSave: (answers: any) => invoke('career:intakeSave', answers),
+    directionGet: () => invoke('career:directionGet'),
+    direction: (force?: boolean) => invoke('career:direction', force),
+    directionPlan: (index: number, kind: 'searches' | 'fits') => invoke('career:directionPlan', { index, kind }),
+    directionApply: (index: number, kind: 'searches' | 'fits') => invoke('career:directionApply', { index, kind }),
+    directionUndo: (p: { searchIds?: number[]; fitIds?: number[] }) => invoke('career:directionUndo', p),
   },
   stories: {
     list: () => invoke('stories:list'),
